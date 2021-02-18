@@ -88,10 +88,21 @@ int main()
 	stop = DWT->CYCCNT;
 	ms = timer.read_ms();
 	delta = stop - start;
+	
+	/// attempt to get sign working
+	shake256_context rng;
+	shake256_context hd;
+	uint8_t nonce[40];
+	
+	int r = falcon_sign_start(&rng, nonce, &hd);
+	
+	//shake256_inject(&hd, data, data_len);
+	///
+	
 	pc.printf("Clock cycles taken: %lu\n", delta);
         pc.printf("Time taken in ms %d\n", ms);
 
-	pc.printf("Clock cycles taken: %lu\n", kg);
+	pc.printf("Clock cycles taken: %llu\n", kg);
         pc.printf("Time taken in ms %d\n", ms);
 
 	//Enable Interrupts;

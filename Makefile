@@ -80,7 +80,7 @@ ELF2BIN = arm-none-eabi-objcopy
 TARGET_ARCH = -mcpu=cortex-m7 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=softfp
 #-march=armv8.1-m.main+mve.fp+fp.dp -mfpu=fpv5-d16 -mfloat-abi=hard
 
-C_DEFS += -O0 -pg  #-fomit-frame-pointer
+C_DEFS += -O0 #-fomit-frame-pointer
 C_DEFS += -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
 C_DEFS += -fmessage-length=0 -fno-exceptions -ffunction-sections -fdata-sections
 C_DEFS += -funsigned-char -MMD -fno-delete-null-pointer-checks
@@ -241,7 +241,7 @@ ASM_FLAGS += -DTRANSACTION_QUEUE_SIZE_SPI=2
 ASM_FLAGS += -DUSE_HAL_DRIVER
 ASM_FLAGS += $(FALCON_FLAGS)
 
-LD_FLAGS :=-Wl,--gc-sections -Wl,--wrap,main -Wl,--wrap,_malloc_r -Wl,--wrap,_free_r -Wl,--wrap,_realloc_r -Wl,--wrap,_memalign_r -Wl,--wrap,_calloc_r -Wl,--wrap,exit -Wl,--wrap,atexit -Wl,-n $(TARGET_ARCH) -DXIP_ENABLE=0
+LD_FLAGS := -Wl,--gc-sections -Wl,--wrap,main -Wl,--wrap,_malloc_r -Wl,--wrap,_free_r -Wl,--wrap,_realloc_r -Wl,--wrap,_memalign_r -Wl,--wrap,_calloc_r -Wl,--wrap,exit -Wl,--wrap,atexit -Wl,-n $(TARGET_ARCH) -DXIP_ENABLE=0
 LD_SYS_LIBS :=-Wl,--start-group -lstdc++ -lsupc++ -lm -lc -lgcc -lnosys -lmbed -Wl,--end-group
 
 # Tools and Flags
