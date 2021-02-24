@@ -62,9 +62,9 @@
  * the native 'double' C type is the default behaviour unless
  * FALCON_ASM_CORTEXM4 is defined to 1, in which case the emulated code
  * will be used.
- *
-#define FALCON_FPNATIVE   1
  */
+#define FALCON_FPNATIVE   1
+
 
 /*
  * Use emulated floating-point implementation.
@@ -84,9 +84,9 @@
  * the native 'double' C type is the default behaviour unless
  * FALCON_ASM_CORTEXM4 is defined to 1, in which case the emulated code
  * will be used.
- */
+ *
 #define FALCON_FPEMU   1
- 
+ */
 
 /*
  * Enable use of assembly for ARM Cortex-M4 CPU. By default, such
@@ -107,9 +107,9 @@
  * enabled explicitly. Take care, though, that the M3 multiplication
  * opcode (multiplication of two 32-bit unsigned integers with a 64-bit
  * result) is NOT constant-time.
- */
+ *
 #define FALCON_ASM_CORTEXM4   1
-
+ */
 
 /*
  * Enable use of AVX2 intrinsics. If enabled, then the code will compile
@@ -140,9 +140,8 @@
  * slightly faster (especially for hashing and random number
  * generation). If not defined explicitly, then autodetection is
  * applied.
- *
-#define FALCON_LE   1
  */
+#define FALCON_LE   1
 
 /*
  * Assert that the platform tolerates accesses to unaligned multibyte

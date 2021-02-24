@@ -77,16 +77,16 @@ CPP     = arm-none-eabi-g++
 LD      = arm-none-eabi-gcc
 ELF2BIN = arm-none-eabi-objcopy
 
-TARGET_ARCH = -mcpu=cortex-m7 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=softfp
+TARGET_ARCH = -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=softfp
 #-march=armv8.1-m.main+mve.fp+fp.dp -mfpu=fpv5-d16 -mfloat-abi=hard
 
-C_DEFS += -O0 #-fomit-frame-pointer
+C_DEFS += -O2 -fomit-frame-pointer
 C_DEFS += -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
 C_DEFS += -fmessage-length=0 -fno-exceptions -ffunction-sections -fdata-sections
 C_DEFS += -funsigned-char -MMD -fno-delete-null-pointer-checks
 
 # See config.h for a description of these
-#FALCON_FLAGS += -DFALCON_FPNATIVE -DFALCON_LE
+FALCON_FLAGS += -DFALCON_LE -DFALCON_FPNATIVE 
 
 C_FLAGS += -std=gnu11
 C_FLAGS += -include mbed_config.h
