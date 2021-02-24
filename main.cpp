@@ -5,6 +5,14 @@
 #include "falcon-20190918/falcon.h"
 #include "stm32f7xx_hal.h"
 
+// added some of these trying to find compiler error
+#include "dilithium2-pqm4/api.h"
+#include "dilithium2-pqm4/packing.h"
+#include "dilithium2-pqm4/params.h"
+#include "dilithium2-pqm4/sign.h"
+#include "dilithium2-pqm4/polyvec.h"
+#include "dilithium2-pqm4/poly.h"
+
 void my_random_seed(int seed);
 
 //------------------------------------
@@ -71,7 +79,7 @@ int main()
 	//uint32_t t;
 	uint64_t clks;
 	int us;
-	unsigned logn = 10; // set to 9 for 512 parameters, 10 for 1024
+	unsigned logn = 9; // set to 9 for 512 parameters, 10 for 1024
 
 	// Just a simple print to know everything works.
 	int i = 1;
@@ -91,7 +99,7 @@ int main()
 	//char pubkey[FALCON_PUBKEY_SIZE(9)] = {0};
 	//char tmp[FALCON_TMPSIZE_KEYGEN(9)] = {0};
 
-	void *pubkey, *pubkey2, *privkey, *sig, *expkey;// *sigct, *expkey;
+	void *pubkey, *pubkey2, *privkey, *sig, *expkey;
 	size_t pubkey_len, privkey_len, sig_len, expkey_len;
 	shake256_context rng;
 	shake256_context hd;
@@ -135,17 +143,12 @@ int main()
 	memset(privkey, 0, privkey_len);
 	memset(pubkey, 0, pubkey_len);
 	pc.printf("Doing KeyGen\n");
-	//ret_val = falcon_keygen_make(
-	//		&sc, 9,
-	//		&privkey, FALCON_PRIVKEY_SIZE(9),
-	//		&pubkey, FALCON_PUBKEY_SIZE(9),
-	//		&tmp, FALCON_TMPSIZE_KEYGEN(9));
 
 	ret_val = falcon_keygen_make(&rng, logn, privkey, privkey_len,
-			pubkey, pubkey_len, tmpkg, tmpkg_len);	
-        
+			pubkey, pubkey_len, tmpkg, tmpkg_len);
+	
         pc.printf("keygen failed if nonzero: %d\n", ret_val);
-        
+
 	memset(pubkey2, 0xFF, pubkey_len);
 	ret_val = falcon_make_public(pubkey2, pubkey_len,
 			privkey, privkey_len, tmpmp, tmpmp_len);
@@ -176,14 +179,47 @@ int main()
 	us    = timer.read_us();
 	delta = stop - start;	
 	*/
-	pc.printf("Doing expand private key\n");			
-	ret_val = falcon_expand_privkey(expkey, expkey_len,
-			privkey, privkey_len, tmpek, tmpek_len);
-	pc.printf("expand_privkey failed if nonzero: %d\n", ret_val);
+
+	#define DILITHIUM_MODE 2
+	//#define CRYPTO_SECRETKEYBYTES 1
+	//#define CRYPTO_PUBLICKEYBYTES 1
+	//#define CRYPTO_BYTES 1
+	
+	uint8_t pk[CRYPTO_PUBLICKEYBYTES] = {0};
+	uint8_t sk[CRYPTO_SECRETKEYBYTES] = {0};
+	uint8_t *pkp = pk;
+	uint8_t *skp = sk;
 
 	timer.reset();
 	timer.start();
 	start = DWT->CYCCNT;
+
+	ret_val = crypto_sign_keypair(pkp, skp);
+	
+	stop  = DWT->CYCCNT;
+	us    = timer.read_us();
+	delta = stop - start;	
+	
+	int crypto_sign_signature(uint8_t *sig, size_t *siglen,
+		                  const uint8_t *m, size_t mlen,
+		                  const uint8_t *sk);
+
+	int crypto_sign(uint8_t *sm, size_t *smlen,
+		        const uint8_t *m, size_t mlen,
+		        const uint8_t *sk);
+
+	int crypto_sign_verify(const uint8_t *sig, size_t siglen,
+		               const uint8_t *m, size_t mlen,
+		               const uint8_t *pk);
+
+	int crypto_sign_open(uint8_t *m, size_t *mlen,
+		             const uint8_t *sm, size_t smlen,
+		             const uint8_t *pk);
+	
+	pc.printf("Doing expand private key\n");			
+	ret_val = falcon_expand_privkey(expkey, expkey_len,
+			privkey, privkey_len, tmpek, tmpek_len);
+	pc.printf("expand_privkey failed if nonzero: %d\n", ret_val);
 	
 	pc.printf("Doing signing (tree)\n");	
 	sig_len = FALCON_SIG_VARTIME_MAXSIZE(logn);		
@@ -191,10 +227,6 @@ int main()
 	ret_val = falcon_sign_tree(&rng, sig, &sig_len, expkey,
 		"data1", 5, 0, tmpst, tmpst_len);
 	pc.printf("sign_tree failed if nonzero: %d\n", ret_val);
-
-	stop  = DWT->CYCCNT;
-	us    = timer.read_us();
-	delta = stop - start;
 
 	pc.printf("Doing verify 2\n");			
 	ret_val = falcon_verify(sig, sig_len, pubkey, pubkey_len, 

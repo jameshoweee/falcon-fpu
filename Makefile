@@ -51,7 +51,12 @@ OBJECTS += main.o
 OBJECTS += falcon-20190918/codec.o falcon-20190918/common.o falcon-20190918/falcon.o falcon-20190918/fft.o
 OBJECTS += falcon-20190918/fpr.o falcon-20190918/keygen.o falcon-20190918/rng.o falcon-20190918/shake.o
 OBJECTS += falcon-20190918/sign.o falcon-20190918/vrfy.o
-INCLUDE_PATHS += -I../falcon-20190918/
+OBJECTS += dilithium2-pqm4/ntt.o dilithium2-pqm4/packing.o dilithium2-pqm4/pointwise_mont.o
+OBJECTS += dilithium2-pqm4/poly.o dilithium2-pqm4/polyvec.o dilithium2-pqm4/rounding.o
+OBJECTS += dilithium2-pqm4/sign.o dilithium2-pqm4/symmetric-shake.o dilithium2-pqm4/vector.o
+OBJECTS += dilithium2-pqm4/fips202.o dilithium2-pqm4/keccakf1600.o
+INCLUDE_PATHS += -I../falcon-20190918/ 
+INCLUDE_PATHS += -I../dilithium2-pqm4/
 
 SYS_OBJECTS += ../mbed/TARGET_NUCLEO_F767ZI/TOOLCHAIN_GCC_ARM/*.o
 
