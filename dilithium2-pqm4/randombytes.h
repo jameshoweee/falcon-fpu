@@ -5,7 +5,7 @@
 #ifdef _WIN32
 #include <CRTDEFS.H>
 #else
-#include <unistd.h>
+//#include <unistd.h>
 #endif
 
 int randombytes(uint8_t *buf, size_t n);

@@ -2,18 +2,31 @@
 
 #include <stdlib.h>
 #include "mbed.h"
-#include "falcon-20190918/falcon.h"
 #include "stm32f7xx_hal.h"
 
+#include "falcon-20190918/falcon.h"
 // added some of these trying to find compiler error
 #include "dilithium2-pqm4/api.h"
+#include "dilithium2-pqm4/config.h"
+
+#include "dilithium2-pqm4/keccakf1600.h"
+#include "dilithium2-pqm4/ntt.h"
 #include "dilithium2-pqm4/packing.h"
 #include "dilithium2-pqm4/params.h"
-#include "dilithium2-pqm4/sign.h"
-#include "dilithium2-pqm4/polyvec.h"
+#include "dilithium2-pqm4/pointwise_mont.h"
 #include "dilithium2-pqm4/poly.h"
+#include "dilithium2-pqm4/polyvec.h"
+#include "dilithium2-pqm4/randombytes.h"
+#include "dilithium2-pqm4/reduce.h"
+#include "dilithium2-pqm4/rounding.h"
+#include "dilithium2-pqm4/sign.h"
+#include "dilithium2-pqm4/symmetric.h"
+#include "dilithium2-pqm4/vector.h"
 
+extern "C" {
 void my_random_seed(int seed);
+#include "dilithium2-pqm4/fips202.h"
+}
 
 //------------------------------------
 // Hyperterminal configuration
@@ -39,6 +52,78 @@ xmalloc(size_t len)
 	}
 	return buf;
 }
+
+static uint32_t fibo_a = 0xDEADBEEF, fibo_b = 0x01234567;
+
+//	we want to be able to quickly reset the state to some value
+
+void my_random_seed(int seed)
+{
+	fibo_a = (0xDEADBEEF ^ (seed << 20) ^ (seed >> 12)) | 1;
+	fibo_b = seed;
+}
+
+//	lightweight fibonacci generator
+
+int randombytes(uint8_t *obuf, size_t len)
+{
+	size_t i;
+
+	for (i = 0; i < len; i++) {
+		fibo_a += fibo_b;
+		fibo_b += fibo_a;
+		obuf[i] = (fibo_a >> 24) ^ (fibo_b >> 16);
+	}
+
+	return 0;
+}
+
+
+
+int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
+  uint8_t seedbuf[2*SEEDBYTES + CRHBYTES];
+  uint8_t tr[SEEDBYTES];
+  const uint8_t *rho, *rhoprime, *key;
+  polyvecl mat[K];
+  polyvecl s1, s1hat;
+  polyveck s2, t1, t0;
+
+  /* Get randomness for rho, rhoprime and key */
+  randombytes(seedbuf, SEEDBYTES);
+  shake256(seedbuf, 2*SEEDBYTES + CRHBYTES, seedbuf, SEEDBYTES);
+  rho = seedbuf;
+  rhoprime = rho + SEEDBYTES;
+  key = rhoprime + CRHBYTES;
+
+  /* Expand matrix */
+  polyvec_matrix_expand(mat, rho);
+
+  /* Sample short vectors s1 and s2 */
+  polyvecl_uniform_eta(&s1, rhoprime, 0);
+  polyveck_uniform_eta(&s2, rhoprime, L);
+
+  /* Matrix-vector multiplication */
+  s1hat = s1;
+  polyvecl_ntt(&s1hat);
+  polyvec_matrix_pointwise_montgomery(&t1, mat, &s1hat);
+  polyveck_reduce(&t1);
+  polyveck_invntt_tomont(&t1);
+
+  /* Add error vector s2 */
+  polyveck_add(&t1, &t1, &s2);
+
+  /* Extract t1 and write public key */
+  polyveck_caddq(&t1);
+  polyveck_power2round(&t1, &t0, &t1);
+  pack_pk(pk, rho, &t1);
+
+  /* Compute H(rho, t1) and write secret key */
+  shake256(tr, SEEDBYTES, pk, CRYPTO_PUBLICKEYBYTES);
+  pack_sk(sk, rho, tr, key, &t0, &s1, &s2);
+
+  return 0;
+}
+
 
 int main()
 {
@@ -181,6 +266,8 @@ int main()
 	*/
 
 	#define DILITHIUM_MODE 2
+	
+	//#define CRYPTO_ALGNAME "Dilithium2"
 	//#define CRYPTO_SECRETKEYBYTES 1
 	//#define CRYPTO_PUBLICKEYBYTES 1
 	//#define CRYPTO_BYTES 1
