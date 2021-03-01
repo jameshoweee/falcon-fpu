@@ -4,6 +4,7 @@
 #include "mbed.h"
 #include "stm32f7xx_hal.h"
 
+extern "C" {
 #include "falcon-20190918/falcon.h"
 // added some of these trying to find compiler error
 #include "dilithium2-pqm4/api.h"
@@ -22,6 +23,7 @@
 #include "dilithium2-pqm4/sign.h"
 #include "dilithium2-pqm4/symmetric.h"
 #include "dilithium2-pqm4/vector.h"
+}
 
 extern "C" {
 void my_random_seed(int seed);
@@ -80,7 +82,7 @@ int randombytes(uint8_t *obuf, size_t len)
 
 
 
-int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
+int crypto_sign_keypair2(uint8_t *pk, uint8_t *sk) {
   uint8_t seedbuf[2*SEEDBYTES + CRHBYTES];
   uint8_t tr[SEEDBYTES];
   const uint8_t *rho, *rhoprime, *key;
