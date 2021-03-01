@@ -51,14 +51,14 @@ OBJECTS += main.o
 OBJECTS += falcon-20190918/codec.o falcon-20190918/common.o falcon-20190918/falcon.o falcon-20190918/fft.o
 OBJECTS += falcon-20190918/fpr.o falcon-20190918/keygen.o falcon-20190918/rng.o
 OBJECTS += falcon-20190918/shake.o falcon-20190918/sign.o falcon-20190918/vrfy.o
-#OBJECTS += dilithium2-pqm4/ntt.o dilithium2-pqm4/packing.o dilithium2-pqm4/pointwise_mont.o
-#OBJECTS += dilithium2-pqm4/poly.o dilithium2-pqm4/polyvec.o dilithium2-pqm4/rounding.o
-#OBJECTS += dilithium2-pqm4/sign.o dilithium2-pqm4/symmetric-shake.o dilithium2-pqm4/vector.o
-#OBJECTS += dilithium2-pqm4/fips202.o dilithium2-pqm4/keccakf1600.o
-OBJECTS += dilithium2-pqclean/ntt.o dilithium2-pqclean/packing.o dilithium2-pqclean/poly.o
-OBJECTS += dilithium2-pqclean/polyvec.o dilithium2-pqclean/reduce.o 
-OBJECTS += dilithium2-pqclean/rounding.o dilithium2-pqclean/sign.o 
-OBJECTS += dilithium2-pqclean/symmetric-shake.o dilithium2-pqclean/fips202.o dilithium2-pqclean/randombytes.o
+OBJECTS += dilithium2-pqm4/ntt.o dilithium2-pqm4/packing.o dilithium2-pqm4/pointwise_mont.o
+OBJECTS += dilithium2-pqm4/poly.o dilithium2-pqm4/polyvec.o dilithium2-pqm4/rounding.o
+OBJECTS += dilithium2-pqm4/sign.o dilithium2-pqm4/symmetric-shake.o dilithium2-pqm4/vector.o
+OBJECTS += dilithium2-pqm4/fips202.o dilithium2-pqm4/keccakf1600.o
+# OBJECTS += dilithium2-pqclean/ntt.o dilithium2-pqclean/packing.o dilithium2-pqclean/poly.o
+# OBJECTS += dilithium2-pqclean/polyvec.o dilithium2-pqclean/reduce.o 
+# OBJECTS += dilithium2-pqclean/rounding.o dilithium2-pqclean/sign.o 
+# OBJECTS += dilithium2-pqclean/symmetric-shake.o dilithium2-pqclean/fips202.o dilithium2-pqclean/randombytes.o
 INCLUDE_PATHS += -I../falcon-20190918/ 
 #INCLUDE_PATHS += -I../dilithium2-pqm4/
 INCLUDE_PATHS += -I../dilithium2-pqclean/
@@ -277,7 +277,7 @@ all: $(PROJECT).bin $(PROJECT).hex size
 .c.o:
 	+@$(call MAKEDIR,$(dir $@))
 	+@echo "Compile: $(notdir $<)"
-	@$(CC) $(C_FLAGS) $(INCLUDE_PATHS) -c -o $@ $<
+	$(CC) $(C_FLAGS) $(INCLUDE_PATHS) -c -o $@ $<
 
 .cpp.o:
 	+@$(call MAKEDIR,$(dir $@))
@@ -290,7 +290,7 @@ $(PROJECT).link_script.ld: $(LINKER_SCRIPT)
 $(PROJECT).elf: $(OBJECTS) $(SYS_OBJECTS) $(PROJECT).link_script.ld
 	+@echo "$(filter %.o, $^)" > .link_options.txt
 	+@echo "link: $(notdir $@)"
-	@$(LD) $(LD_FLAGS) -T $(filter-out %.o, $^) $(LIBRARY_PATHS) --output $@ @.link_options.txt $(LIBRARIES) $(LD_SYS_LIBS)
+	$(LD) $(LD_FLAGS) -T $(filter-out %.o, $^) $(LIBRARY_PATHS) --output $@ @.link_options.txt $(LIBRARIES) $(LD_SYS_LIBS)
 
 $(PROJECT).bin: $(PROJECT).elf
 	$(ELF2BIN) -O binary $< $@
