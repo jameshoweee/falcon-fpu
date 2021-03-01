@@ -49,14 +49,19 @@ PROJECT := FALCON-NUCLEO-F767ZI
 OBJECTS += main.o
 # Falcon specific imports
 OBJECTS += falcon-20190918/codec.o falcon-20190918/common.o falcon-20190918/falcon.o falcon-20190918/fft.o
-OBJECTS += falcon-20190918/fpr.o falcon-20190918/keygen.o falcon-20190918/rng.o falcon-20190918/shake.o
-OBJECTS += falcon-20190918/sign.o falcon-20190918/vrfy.o
-OBJECTS += dilithium2-pqm4/ntt.o dilithium2-pqm4/packing.o dilithium2-pqm4/pointwise_mont.o
-OBJECTS += dilithium2-pqm4/poly.o dilithium2-pqm4/polyvec.o dilithium2-pqm4/rounding.o
-OBJECTS += dilithium2-pqm4/sign.o dilithium2-pqm4/symmetric-shake.o dilithium2-pqm4/vector.o
-OBJECTS += dilithium2-pqm4/fips202.o dilithium2-pqm4/keccakf1600.o
+OBJECTS += falcon-20190918/fpr.o falcon-20190918/keygen.o falcon-20190918/rng.o
+OBJECTS += falcon-20190918/shake.o falcon-20190918/sign.o falcon-20190918/vrfy.o
+#OBJECTS += dilithium2-pqm4/ntt.o dilithium2-pqm4/packing.o dilithium2-pqm4/pointwise_mont.o
+#OBJECTS += dilithium2-pqm4/poly.o dilithium2-pqm4/polyvec.o dilithium2-pqm4/rounding.o
+#OBJECTS += dilithium2-pqm4/sign.o dilithium2-pqm4/symmetric-shake.o dilithium2-pqm4/vector.o
+#OBJECTS += dilithium2-pqm4/fips202.o dilithium2-pqm4/keccakf1600.o
+OBJECTS += dilithium2-pqclean/ntt.o dilithium2-pqclean/packing.o dilithium2-pqclean/poly.o
+OBJECTS += dilithium2-pqclean/polyvec.o dilithium2-pqclean/reduce.o 
+OBJECTS += dilithium2-pqclean/rounding.o dilithium2-pqclean/sign.o 
+OBJECTS += dilithium2-pqclean/symmetric-shake.o dilithium2-pqclean/fips202.o dilithium2-pqclean/randombytes.o
 INCLUDE_PATHS += -I../falcon-20190918/ 
-INCLUDE_PATHS += -I../dilithium2-pqm4/
+#INCLUDE_PATHS += -I../dilithium2-pqm4/
+INCLUDE_PATHS += -I../dilithium2-pqclean/
 
 SYS_OBJECTS += ../mbed/TARGET_NUCLEO_F767ZI/TOOLCHAIN_GCC_ARM/*.o
 
