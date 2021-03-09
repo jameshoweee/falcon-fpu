@@ -47,21 +47,22 @@ PROJECT := FALCON-NUCLEO-F767ZI
 # Objects and Paths
 
 OBJECTS += main.o
-# Falcon specific imports
+# Falcon/Dilithium specific imports
 OBJECTS += falcon-20190918/codec.o falcon-20190918/common.o falcon-20190918/falcon.o falcon-20190918/fft.o
 OBJECTS += falcon-20190918/fpr.o falcon-20190918/keygen.o falcon-20190918/rng.o
 OBJECTS += falcon-20190918/shake.o falcon-20190918/sign.o falcon-20190918/vrfy.o
-OBJECTS += dilithium2-pqm4/ntt.o dilithium2-pqm4/packing.o dilithium2-pqm4/pointwise_mont.o
-OBJECTS += dilithium2-pqm4/poly.o dilithium2-pqm4/polyvec.o dilithium2-pqm4/rounding.o
-OBJECTS += dilithium2-pqm4/sign.o dilithium2-pqm4/symmetric-shake.o dilithium2-pqm4/vector.o
-OBJECTS += dilithium2-pqm4/fips202.o dilithium2-pqm4/keccakf1600.o
-# OBJECTS += dilithium2-pqclean/ntt.o dilithium2-pqclean/packing.o dilithium2-pqclean/poly.o
-# OBJECTS += dilithium2-pqclean/polyvec.o dilithium2-pqclean/reduce.o 
-# OBJECTS += dilithium2-pqclean/rounding.o dilithium2-pqclean/sign.o 
-# OBJECTS += dilithium2-pqclean/symmetric-shake.o dilithium2-pqclean/fips202.o dilithium2-pqclean/randombytes.o
+OBJECTS += dilithium-pqm4/ntt.o dilithium-pqm4/packing.o dilithium-pqm4/pointwise_mont.o
+OBJECTS += dilithium-pqm4/poly.o dilithium-pqm4/polyvec.o dilithium-pqm4/rounding.o
+OBJECTS += dilithium-pqm4/sign.o dilithium-pqm4/symmetric-shake.o dilithium-pqm4/vector.o
+OBJECTS += dilithium-pqm4/fips202.o dilithium-pqm4/keccakf1600.o
+#OBJECTS += dilithium-pqclean/ntt.o dilithium-pqclean/packing.o dilithium-pqclean/poly.o
+#OBJECTS += dilithium-pqclean/polyvec.o dilithium-pqclean/reduce.o 
+#OBJECTS += dilithium-pqclean/rounding.o dilithium-pqclean/sign.o 
+#OBJECTS += dilithium-pqclean/symmetric-shake.o dilithium-pqclean/fips202.o dilithium-pqclean/randombytes.o
+
 INCLUDE_PATHS += -I../falcon-20190918/ 
-#INCLUDE_PATHS += -I../dilithium2-pqm4/
-INCLUDE_PATHS += -I../dilithium2-pqclean/
+INCLUDE_PATHS += -I../dilithium-pqm4/
+#INCLUDE_PATHS += -I../dilithium-pqclean/
 
 SYS_OBJECTS += ../mbed/TARGET_NUCLEO_F767ZI/TOOLCHAIN_GCC_ARM/*.o
 
@@ -87,8 +88,8 @@ CPP     = arm-none-eabi-g++
 LD      = arm-none-eabi-gcc
 ELF2BIN = arm-none-eabi-objcopy
 
-TARGET_ARCH = -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=softfp
-#-march=armv8.1-m.main+mve.fp+fp.dp -mfpu=fpv5-d16 -mfloat-abi=hard
+# dilithium should use -mfpu=fpv4-sp-d16, falcon should use -mfpu=fpv5-d16
+TARGET_ARCH = -mcpu=cortex-m7 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=softfp
 
 C_DEFS += -O2 -fomit-frame-pointer
 C_DEFS += -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers
@@ -96,7 +97,7 @@ C_DEFS += -fmessage-length=0 -fno-exceptions -ffunction-sections -fdata-sections
 C_DEFS += -funsigned-char -MMD -fno-delete-null-pointer-checks
 
 # See config.h for a description of these
-FALCON_FLAGS += -DFALCON_LE -DFALCON_FPNATIVE 
+#FALCON_FLAGS += -DFALCON_LE -DFALCON_FPNATIVE 
 
 C_FLAGS += -std=gnu11
 C_FLAGS += -include mbed_config.h
@@ -277,7 +278,7 @@ all: $(PROJECT).bin $(PROJECT).hex size
 .c.o:
 	+@$(call MAKEDIR,$(dir $@))
 	+@echo "Compile: $(notdir $<)"
-	$(CC) $(C_FLAGS) $(INCLUDE_PATHS) -c -o $@ $<
+	@$(CC) $(C_FLAGS) $(INCLUDE_PATHS) -c -o $@ $<
 
 .cpp.o:
 	+@$(call MAKEDIR,$(dir $@))
@@ -290,7 +291,7 @@ $(PROJECT).link_script.ld: $(LINKER_SCRIPT)
 $(PROJECT).elf: $(OBJECTS) $(SYS_OBJECTS) $(PROJECT).link_script.ld
 	+@echo "$(filter %.o, $^)" > .link_options.txt
 	+@echo "link: $(notdir $@)"
-	$(LD) $(LD_FLAGS) -T $(filter-out %.o, $^) $(LIBRARY_PATHS) --output $@ @.link_options.txt $(LIBRARIES) $(LD_SYS_LIBS)
+	@$(LD) $(LD_FLAGS) -T $(filter-out %.o, $^) $(LIBRARY_PATHS) --output $@ @.link_options.txt $(LIBRARIES) $(LD_SYS_LIBS)
 
 $(PROJECT).bin: $(PROJECT).elf
 	$(ELF2BIN) -O binary $< $@

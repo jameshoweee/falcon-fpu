@@ -6,28 +6,42 @@
 
 extern "C" {
 #include "falcon-20190918/falcon.h"
-// added some of these trying to find compiler error
-#include "dilithium2-pqm4/api.h"
-#include "dilithium2-pqm4/config.h"
 
-#include "dilithium2-pqm4/keccakf1600.h"
-#include "dilithium2-pqm4/ntt.h"
-#include "dilithium2-pqm4/packing.h"
-#include "dilithium2-pqm4/params.h"
-#include "dilithium2-pqm4/pointwise_mont.h"
-#include "dilithium2-pqm4/poly.h"
-#include "dilithium2-pqm4/polyvec.h"
-#include "dilithium2-pqm4/randombytes.h"
-#include "dilithium2-pqm4/reduce.h"
-#include "dilithium2-pqm4/rounding.h"
-#include "dilithium2-pqm4/sign.h"
-#include "dilithium2-pqm4/symmetric.h"
-#include "dilithium2-pqm4/vector.h"
+#include "dilithium-pqm4/api.h"
+#include "dilithium-pqm4/config.h"
+#include "dilithium-pqm4/keccakf1600.h"
+#include "dilithium-pqm4/ntt.h"
+#include "dilithium-pqm4/packing.h"
+#include "dilithium-pqm4/params.h"
+#include "dilithium-pqm4/pointwise_mont.h"
+#include "dilithium-pqm4/poly.h"
+#include "dilithium-pqm4/polyvec.h"
+#include "dilithium-pqm4/randombytes.h"
+#include "dilithium-pqm4/reduce.h"
+#include "dilithium-pqm4/rounding.h"
+#include "dilithium-pqm4/sign.h"
+#include "dilithium-pqm4/symmetric.h"
+#include "dilithium-pqm4/vector.h"
+
+/*
+#include "dilithium2-pqclean/api.h"
+#include "dilithium2-pqclean/fips202.h"
+#include "dilithium2-pqclean/ntt.h"
+#include "dilithium2-pqclean/packing.h"
+#include "dilithium2-pqclean/params.h"
+#include "dilithium2-pqclean/poly.h"
+#include "dilithium2-pqclean/polyvec.h"
+#include "dilithium2-pqclean/randombytes.h"
+#include "dilithium2-pqclean/reduce.h"
+#include "dilithium2-pqclean/rounding.h"
+#include "dilithium2-pqclean/sign.h"
+#include "dilithium2-pqclean/symmetric.h"
+*/
 }
 
 extern "C" {
 void my_random_seed(int seed);
-#include "dilithium2-pqm4/fips202.h"
+//#include "dilithium2-pqm4/fips202.h"
 }
 
 //------------------------------------
@@ -81,52 +95,6 @@ int randombytes(uint8_t *obuf, size_t len)
 }
 
 
-
-int crypto_sign_keypair2(uint8_t *pk, uint8_t *sk) {
-  uint8_t seedbuf[2*SEEDBYTES + CRHBYTES];
-  uint8_t tr[SEEDBYTES];
-  const uint8_t *rho, *rhoprime, *key;
-  polyvecl mat[K];
-  polyvecl s1, s1hat;
-  polyveck s2, t1, t0;
-
-  /* Get randomness for rho, rhoprime and key */
-  randombytes(seedbuf, SEEDBYTES);
-  shake256(seedbuf, 2*SEEDBYTES + CRHBYTES, seedbuf, SEEDBYTES);
-  rho = seedbuf;
-  rhoprime = rho + SEEDBYTES;
-  key = rhoprime + CRHBYTES;
-
-  /* Expand matrix */
-  polyvec_matrix_expand(mat, rho);
-
-  /* Sample short vectors s1 and s2 */
-  polyvecl_uniform_eta(&s1, rhoprime, 0);
-  polyveck_uniform_eta(&s2, rhoprime, L);
-
-  /* Matrix-vector multiplication */
-  s1hat = s1;
-  polyvecl_ntt(&s1hat);
-  polyvec_matrix_pointwise_montgomery(&t1, mat, &s1hat);
-  polyveck_reduce(&t1);
-  polyveck_invntt_tomont(&t1);
-
-  /* Add error vector s2 */
-  polyveck_add(&t1, &t1, &s2);
-
-  /* Extract t1 and write public key */
-  polyveck_caddq(&t1);
-  polyveck_power2round(&t1, &t0, &t1);
-  pack_pk(pk, rho, &t1);
-
-  /* Compute H(rho, t1) and write secret key */
-  shake256(tr, SEEDBYTES, pk, CRYPTO_PUBLICKEYBYTES);
-  pack_sk(sk, rho, tr, key, &t0, &s1, &s2);
-
-  return 0;
-}
-
-
 int main()
 {
 	uint64_t scc_ms = 96000;	//	clocks per millisecond
@@ -175,8 +143,8 @@ int main()
 		pc.printf("This program runs since %d seconds.\n", i++);
 		myled = !myled;
 	}
-
-	// TODO: Use actual randomness for this later?
+	
+	/*
 	char seed[16] = {0};
 	shake256_context sc;
 	shake256_init_prng_from_seed(&sc, seed, 16);
@@ -244,67 +212,32 @@ int main()
 
 	pc.printf("Doing Signing\n");
 	memset(sig, 0, sig_len);	
+	
+	timer.reset();
+	timer.start();
+	start = DWT->CYCCNT;
+	
 	ret_val = falcon_sign_dyn(&rng, sig, &sig_len,
 			privkey, privkey_len,
 			"data1", 5, 0, tmpsd, tmpsd_len);
-        pc.printf("sign_dyn failed if nonzero: %d\n", ret_val);	
-	
-	/*
-	CYCLES_VARS
-	CYCLES_START
-	*/
+        pc.printf("sign_dyn failed if nonzero: %d\n", ret_val);
+        
+	stop  = DWT->CYCCNT;
+	us    = timer.read_us();
+	delta = stop - start;	
 	
 	pc.printf("Doing Verifying\n");			
 	ret_val = falcon_verify(sig, sig_len, pubkey, 
 			pubkey_len, "data1", 5, tmpvv, tmpvv_len);
 	pc.printf("verify failed if nonzero: %d\n", ret_val);
 	
-	/*
-	CYCLES_ADD(clks)
-	stop  = DWT->CYCCNT;
-	ms    = timer.read_ms();
-	us    = timer.read_us();
-	delta = stop - start;	
-	*/
+	//CYCLES_ADD(clks)
+	//stop  = DWT->CYCCNT;
+	//ms    = timer.read_ms();
+	//us    = timer.read_us();
+	//delta = stop - start;	
 
-	#define DILITHIUM_MODE 2
-	
-	//#define CRYPTO_ALGNAME "Dilithium2"
-	//#define CRYPTO_SECRETKEYBYTES 1
-	//#define CRYPTO_PUBLICKEYBYTES 1
-	//#define CRYPTO_BYTES 1
-	
-	uint8_t pk[CRYPTO_PUBLICKEYBYTES] = {0};
-	uint8_t sk[CRYPTO_SECRETKEYBYTES] = {0};
-	uint8_t *pkp = pk;
-	uint8_t *skp = sk;
 
-	timer.reset();
-	timer.start();
-	start = DWT->CYCCNT;
-
-	ret_val = crypto_sign_keypair(pkp, skp);
-	
-	stop  = DWT->CYCCNT;
-	us    = timer.read_us();
-	delta = stop - start;	
-	
-	int crypto_sign_signature(uint8_t *sig, size_t *siglen,
-		                  const uint8_t *m, size_t mlen,
-		                  const uint8_t *sk);
-
-	int crypto_sign(uint8_t *sm, size_t *smlen,
-		        const uint8_t *m, size_t mlen,
-		        const uint8_t *sk);
-
-	int crypto_sign_verify(const uint8_t *sig, size_t siglen,
-		               const uint8_t *m, size_t mlen,
-		               const uint8_t *pk);
-
-	int crypto_sign_open(uint8_t *m, size_t *mlen,
-		             const uint8_t *sm, size_t smlen,
-		             const uint8_t *pk);
-	
 	pc.printf("Doing expand private key\n");			
 	ret_val = falcon_expand_privkey(expkey, expkey_len,
 			privkey, privkey_len, tmpek, tmpek_len);
@@ -322,7 +255,35 @@ int main()
 				"data1", 5, tmpvv, tmpvv_len);
 	pc.printf("verify 2 failed if nonzero: %d\n", ret_val);
 	
-	pc.printf("Falcon finished\n");			
+	pc.printf("Falcon finished\n");		
+	*/
+
+	#define MLEN 59
+	size_t mlen, smlen;
+	uint8_t pk[CRYPTO_PUBLICKEYBYTES] = {0};
+	uint8_t sk[CRYPTO_SECRETKEYBYTES] = {0};
+	int ret_val = 0;
+	uint8_t m[MLEN + CRYPTO_BYTES];
+	uint8_t m2[MLEN + CRYPTO_BYTES];
+	uint8_t sm[MLEN + CRYPTO_BYTES];
+	randombytes(m, MLEN);
+
+	ret_val = crypto_sign_keypair(pk, sk);
+	
+	//ret_val = crypto_sign_signature(sigp, &siglen, &m, mlen, skp);
+	ret_val = crypto_sign(sm, &smlen, m, MLEN, sk);
+
+	ret_val = crypto_sign_open(m2, &mlen, sm, smlen, pk);
+	
+	timer.reset();
+	timer.start();
+	start = DWT->CYCCNT;
+		
+	ret_val = crypto_sign_verify(sm, CRYPTO_BYTES, m, MLEN, pk);
+
+	stop  = DWT->CYCCNT;
+	us    = timer.read_us();
+	delta = stop - start;
 
 	pc.printf("Clock cycles taken: %lu\n", delta);
         pc.printf("Time taken in microsecs %d\n", us);
