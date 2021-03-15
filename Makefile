@@ -49,9 +49,14 @@ PROJECT := FALCON-NUCLEO-F767ZI
 OBJECTS += main.o
 # Falcon specific imports
 OBJECTS += falcon-20190918/codec.o falcon-20190918/common.o falcon-20190918/falcon.o falcon-20190918/fft.o
-OBJECTS += falcon-20190918/fpr.o falcon-20190918/keygen.o falcon-20190918/rng.o falcon-20190918/shake.o
-OBJECTS += falcon-20190918/sign.o falcon-20190918/vrfy.o
+OBJECTS += falcon-20190918/fpr.o falcon-20190918/keygen.o falcon-20190918/rng.o 
+OBJECTS += falcon-20190918/shake.o falcon-20190918/sign.o falcon-20190918/vrfy.o
+OBJECTS += dilithium-pqm4/ntt.o dilithium-pqm4/packing.o dilithium-pqm4/pointwise_mont.o
+OBJECTS += dilithium-pqm4/poly.o dilithium-pqm4/polyvec.o dilithium-pqm4/rounding.o
+OBJECTS += dilithium-pqm4/sign.o dilithium-pqm4/symmetric-shake.o dilithium-pqm4/vector.o
+OBJECTS += dilithium-pqm4/fips202.o dilithium-pqm4/keccakf1600.o
 INCLUDE_PATHS += -I../falcon-20190918/
+INCLUDE_PATHS += -I../dilithium-pqm4/
 
 SYS_OBJECTS += ../mbed/TARGET_NUCLEO_F767ZI/TOOLCHAIN_GCC_ARM/*.o
 
@@ -77,7 +82,8 @@ CPP     = arm-none-eabi-g++
 LD      = arm-none-eabi-gcc
 ELF2BIN = arm-none-eabi-objcopy
 
-TARGET_ARCH = -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=softfp
+TARGET_ARCH = -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -march=armv7e-m+fpv5+fp.dp -mfloat-abi=softfp
+#-mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -march=armv7e-m+fpv5+fp.dp #-mfloat-abi=softfp
 #-march=armv8.1-m.main+mve.fp+fp.dp -mfpu=fpv5-d16 -mfloat-abi=hard
 
 C_DEFS += -O2 -fomit-frame-pointer

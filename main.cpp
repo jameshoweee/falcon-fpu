@@ -2,10 +2,27 @@
 
 #include <stdlib.h>
 #include "mbed.h"
-#include "falcon-20190918/falcon.h"
 #include "stm32f7xx_hal.h"
 
-void my_random_seed(int seed);
+extern "C" {
+#include "falcon-20190918/falcon.h"
+#include "dilithium-pqm4/api.h"
+#include "dilithium-pqm4/config.h"
+#include "dilithium-pqm4/keccakf1600.h"
+#include "dilithium-pqm4/ntt.h"
+#include "dilithium-pqm4/packing.h"
+#include "dilithium-pqm4/params.h"
+#include "dilithium-pqm4/pointwise_mont.h"
+#include "dilithium-pqm4/poly.h"
+#include "dilithium-pqm4/polyvec.h"
+#include "dilithium-pqm4/randombytes.h"
+#include "dilithium-pqm4/reduce.h"
+#include "dilithium-pqm4/rounding.h"
+#include "dilithium-pqm4/sign.h"
+#include "dilithium-pqm4/symmetric.h"
+#include "dilithium-pqm4/vector.h"
+//void my_random_seed(int seed);
+}
 
 //------------------------------------
 // Hyperterminal configuration
@@ -30,6 +47,18 @@ xmalloc(size_t len)
 		exit(EXIT_FAILURE);
 	}
 	return buf;
+}
+
+int randombytes(uint8_t *obuf, size_t len)
+{
+	static uint32_t fibo_a = 0xDEADBEEF, fibo_b = 0x01234567;
+	size_t i;
+	for (i = 0; i < len; i++) {
+		fibo_a += fibo_b;
+		fibo_b += fibo_a;
+		obuf[i] = (fibo_a >> 24) ^ (fibo_b >> 16);
+	}
+	return 0;
 }
 
 int main()
@@ -71,7 +100,7 @@ int main()
 	//uint32_t t;
 	uint64_t clks;
 	int us;
-	unsigned logn = 10; // set to 9 for 512 parameters, 10 for 1024
+	unsigned logn = 9; // set to 9 for 512 parameters, 10 for 1024
 
 	// Just a simple print to know everything works.
 	int i = 1;
@@ -135,11 +164,6 @@ int main()
 	memset(privkey, 0, privkey_len);
 	memset(pubkey, 0, pubkey_len);
 	pc.printf("Doing KeyGen\n");
-	//ret_val = falcon_keygen_make(
-	//		&sc, 9,
-	//		&privkey, FALCON_PRIVKEY_SIZE(9),
-	//		&pubkey, FALCON_PUBKEY_SIZE(9),
-	//		&tmp, FALCON_TMPSIZE_KEYGEN(9));
 
 	ret_val = falcon_keygen_make(&rng, logn, privkey, privkey_len,
 			pubkey, pubkey_len, tmpkg, tmpkg_len);	
@@ -152,38 +176,31 @@ int main()
         pc.printf("makepub failed if nonzero: %d\n", ret_val);
 	//check_eq(pubkey, pubkey2, pubkey_len, "pub / repub");
 
+
+	timer.reset();
+	timer.start();
+	start = DWT->CYCCNT;
+
 	pc.printf("Doing Signing\n");
 	memset(sig, 0, sig_len);	
 	ret_val = falcon_sign_dyn(&rng, sig, &sig_len,
 			privkey, privkey_len,
 			"data1", 5, 0, tmpsd, tmpsd_len);
         pc.printf("sign_dyn failed if nonzero: %d\n", ret_val);	
-	
-	/*
-	CYCLES_VARS
-	CYCLES_START
-	*/
+        
+	stop  = DWT->CYCCNT;
+	us    = timer.read_us();
+	delta = stop - start;
 	
 	pc.printf("Doing Verifying\n");			
 	ret_val = falcon_verify(sig, sig_len, pubkey, 
 			pubkey_len, "data1", 5, tmpvv, tmpvv_len);
 	pc.printf("verify failed if nonzero: %d\n", ret_val);
 	
-	/*
-	CYCLES_ADD(clks)
-	stop  = DWT->CYCCNT;
-	ms    = timer.read_ms();
-	us    = timer.read_us();
-	delta = stop - start;	
-	*/
 	pc.printf("Doing expand private key\n");			
 	ret_val = falcon_expand_privkey(expkey, expkey_len,
 			privkey, privkey_len, tmpek, tmpek_len);
 	pc.printf("expand_privkey failed if nonzero: %d\n", ret_val);
-
-	timer.reset();
-	timer.start();
-	start = DWT->CYCCNT;
 	
 	pc.printf("Doing signing (tree)\n");	
 	sig_len = FALCON_SIG_VARTIME_MAXSIZE(logn);		
@@ -192,16 +209,44 @@ int main()
 		"data1", 5, 0, tmpst, tmpst_len);
 	pc.printf("sign_tree failed if nonzero: %d\n", ret_val);
 
-	stop  = DWT->CYCCNT;
-	us    = timer.read_us();
-	delta = stop - start;
-
 	pc.printf("Doing verify 2\n");			
 	ret_val = falcon_verify(sig, sig_len, pubkey, pubkey_len, 
 				"data1", 5, tmpvv, tmpvv_len);
 	pc.printf("verify 2 failed if nonzero: %d\n", ret_val);
 	
-	pc.printf("Falcon finished\n");			
+	pc.printf("Falcon finished\n");
+	
+	/*
+ 	* Dilithium Round 3 code using pqm4 as it's faster than pqclean.
+	* ret_val outputs 0 if functions work as expected.
+	* comment code out below to switch between Falcon and Dilithium.
+	*/
+	/*
+	#define MLEN 59
+	size_t mlen, smlen;
+	uint8_t pk[CRYPTO_PUBLICKEYBYTES] = {0};
+	uint8_t sk[CRYPTO_SECRETKEYBYTES] = {0};
+	uint8_t m[MLEN + CRYPTO_BYTES];
+	uint8_t m2[MLEN + CRYPTO_BYTES];
+	uint8_t sm[MLEN + CRYPTO_BYTES];
+	randombytes(m, MLEN);
+
+	ret_val = crypto_sign_keypair(pk, sk);
+
+	ret_val = crypto_sign(sm, &smlen, m, MLEN, sk);
+
+	ret_val = crypto_sign_open(m2, &mlen, sm, smlen, pk);
+	
+	timer.reset();
+	timer.start();
+	start = DWT->CYCCNT;
+		
+	ret_val = crypto_sign_verify(sm, CRYPTO_BYTES, m, MLEN, pk);
+
+	stop  = DWT->CYCCNT;
+	us    = timer.read_us();
+	delta = stop - start;	
+	*/	
 
 	pc.printf("Clock cycles taken: %lu\n", delta);
         pc.printf("Time taken in microsecs %d\n", us);
