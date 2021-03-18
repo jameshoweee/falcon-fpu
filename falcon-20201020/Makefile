@@ -1,69 +1,101 @@
-# This Makefile compiles the implementation in this directory along with
-# the known answer tests generator located in the
-# ../../../KAT/generator/ directory. The output is an executable program
-# in the build/ subdirectory, whose name starts with 'kat', followed by
-# the implementation name (e.g. 'kat512int' for the 'falcon512int'
-# implementation). This program, when executed, generates the .req and
-# .rsp files in the expected NIST format.
+# Build script for the Falcon implementation.
+#
+# ==========================(LICENSE BEGIN)============================
+#
+# Copyright (c) 2017-2019  Falcon Project
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+# ===========================(LICENSE END)=============================
+#
+# @author   Thomas Pornin <thomas.pornin@nccgroup.com>
 
 .POSIX:
 
-CC = c99
-CFLAGS = -W -Wall -O2
-LD = c99
-LDFLAGS = 
-LIBS = 
+# =====================================================================
+#
+# Configurable options:
+#   CC       C compiler; GCC or Clang are fine; MSVC (2015+) works too.
+#   CFLAGS   Compilation flags:
+#             * Optimization level -O2 or higher is recommended
+#            See config.h for some possible configuration macros.
+#   LD       Linker; normally the same command as the compiler.
+#   LDFLAGS  Linker options, not counting the extra libs.
+#   LIBS     Extra libraries for linking:
+#             * If using the native FPU, test_falcon and application
+#               code that calls this library may need: -lm
+#               (normally not needed on x86, both 32-bit and 64-bit)
 
-OBJ1 = build/codec.o build/common.o build/fft.o build/fpr.o build/keygen.o build/nist.o build/rng.o build/shake.o build/sign.o build/vrfy.o
+CC = clang
+CFLAGS = -Wall -Wextra -Wshadow -Wundef -O3 #-pg -fno-pie
+LD = clang
+LDFLAGS = #-pg -no-pie
+LIBS = #-lm
 
-OBJ2 = build/PQCgenKAT_sign.o build/katrng.o
+# =====================================================================
 
-HEAD1 = api.h fpr.h inner.h
-HEAD2 = api.h ../../../KAT/generator/katrng.h
+OBJ = codec.o common.o falcon.o fft.o fpr.o keygen.o rng.o shake.o sign.o vrfy.o
 
-all: build build/kat512int
-
-build:
-	-mkdir build
+all: test_falcon speed
 
 clean:
-	-rm -f build/kat512int $(OBJ1) $(OBJ2)
+	-rm -f $(OBJ) test_falcon test_falcon.o speed speed.o
 
-build/kat512int: $(OBJ1) $(OBJ2)
-	$(LD) $(LDFLAGS) -o build/kat512int $(OBJ1) $(OBJ2) $(LIBS)
+test_falcon: test_falcon.o $(OBJ)
+	$(LD) $(LDFLAGS) -o test_falcon test_falcon.o $(OBJ) $(LIBS)
 
-build/codec.o: codec.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/codec.o codec.c
+speed: speed.o $(OBJ)
+	$(LD) $(LDFLAGS) -o speed speed.o $(OBJ) $(LIBS)
 
-build/common.o: common.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/common.o common.c
+codec.o: codec.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o codec.o codec.c
 
-build/fft.o: fft.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/fft.o fft.c
+common.o: common.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o common.o common.c
 
-build/fpr.o: fpr.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/fpr.o fpr.c
+falcon.o: falcon.c falcon.h config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o falcon.o falcon.c
 
-build/keygen.o: keygen.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/keygen.o keygen.c
+fft.o: fft.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o fft.o fft.c
 
-build/nist.o: nist.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/nist.o nist.c
+fpr.o: fpr.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o fpr.o fpr.c
 
-build/rng.o: rng.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/rng.o rng.c
+keygen.o: keygen.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o keygen.o keygen.c
 
-build/shake.o: shake.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/shake.o shake.c
+rng.o: rng.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o rng.o rng.c
 
-build/sign.o: sign.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/sign.o sign.c
+shake.o: shake.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o shake.o shake.c
 
-build/vrfy.o: vrfy.c $(HEAD1)
-	$(CC) $(CFLAGS) -c -o build/vrfy.o vrfy.c
+sign.o: sign.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o sign.o sign.c
 
-build/PQCgenKAT_sign.o: ../../../KAT/generator/PQCgenKAT_sign.c $(HEAD2)
-	$(CC) $(CFLAGS) -I . -DALGNAME=falcon512int -c -o build/PQCgenKAT_sign.o ../../../KAT/generator/PQCgenKAT_sign.c
+speed.o: speed.c falcon.h
+	$(CC) $(CFLAGS) -c -o speed.o speed.c
 
-build/katrng.o: ../../../KAT/generator/katrng.c $(HEAD2)
-	$(CC) $(CFLAGS) -I . -c -o build/katrng.o ../../../KAT/generator/katrng.c
+test_falcon.o: test_falcon.c falcon.h config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o test_falcon.o test_falcon.c
+
+vrfy.o: vrfy.c config.h inner.h fpr.h
+	$(CC) $(CFLAGS) -c -o vrfy.o vrfy.c

@@ -5,7 +5,7 @@
 #include "stm32f7xx_hal.h"
 
 extern "C" {
-#include "falcon-20190918/falcon.h"
+#include "falcon-20201020/falcon.h"
 #include "dilithium-pqm4/api.h"
 #include "dilithium-pqm4/config.h"
 #include "dilithium-pqm4/keccakf1600.h"
@@ -21,7 +21,6 @@ extern "C" {
 #include "dilithium-pqm4/sign.h"
 #include "dilithium-pqm4/symmetric.h"
 #include "dilithium-pqm4/vector.h"
-//void my_random_seed(int seed);
 }
 
 //------------------------------------
@@ -32,6 +31,28 @@ extern "C" {
 Serial pc(SERIAL_TX, SERIAL_RX, 115200);
 DigitalOut myled(LED1);
 Timer timer;
+
+static void
+check_eq(const void *a, const void *b, size_t len, const char *banner)
+{
+	size_t u;
+
+	if (memcmp(a, b, len) == 0) {
+		return;
+	}
+	fprintf(stderr, "%s: wrong value:\n", banner);
+	fprintf(stderr, "a: ");
+	for (u = 0; u < len; u ++) {
+		fprintf(stderr, "%02x", ((const unsigned char *)a)[u]);
+	}
+	fprintf(stderr, "\n");
+	fprintf(stderr, "b: ");
+	for (u = 0; u < len; u ++) {
+		fprintf(stderr, "%02x", ((const unsigned char *)b)[u]);
+	}
+	fprintf(stderr, "\n");
+	exit(EXIT_FAILURE);
+}
 
 static void *
 xmalloc(size_t len)
@@ -63,26 +84,40 @@ int randombytes(uint8_t *obuf, size_t len)
 
 int main()
 {
-	uint64_t scc_ms = 96000;	//	clocks per millisecond
-	uint64_t ofl_ms = 44739;	//	milliseconds per overflow
+	#define BENCHMARK_ROUND 100
+	uint64_t start;
+        uint64_t stop;
+       	uint64_t delta;
+       	uint64_t average_clk;
+	int us, average_us, cnt;
 	
-	#define CYCLES_VARS							\
-	int ms;									\
-	uint32_t t;
-
-	#define CYCLES_START {						\
-		ms = timer.read_ms();					\
-		t = DWT->CYCCNT;						\
-	}
-
-	#define CYCLES_ADD(cc) {					\
-		t = DWT->CYCCNT - t;					\
-		cc += (uint64_t) t;						\
-		ms = timer.read_ms() - ms;				\
-		ms -= ((uint64_t) t) / scc_ms;			\
-		cc += ((uint64_t) (ms / ofl_ms)) << 32;	\
+	#define CALC_RESET {		 \
+		average_clk = 0;	 \
+		average_us  = 0;	 \
+		timer.reset();		 \
+		cnt = 1;		 \
 	}
 	
+	#define CALC_START {		 \
+		timer.reset();		 \
+		timer.start();		 \
+		start = DWT->CYCCNT;	 \
+	}
+	
+	#define CALC_STOP {		 		 \
+		stop         = DWT->CYCCNT;     	 \
+		us           = timer.read_us(); 	 \
+		delta        = stop - start;		 \
+		average_clk += (delta-average_clk)/cnt;	 \
+		average_us  += (us-average_us)/cnt;	 \
+		cnt         += 1;			 \
+	}
+	
+	#define CALC_AVG {				\
+	}
+	//		delta = average_clk / BENCHMARK_ROUND;  \
+	//		us    = average_us  / BENCHMARK_ROUND;  \
+
 	#define timer_read_ms(x)    chrono::duration_cast<chrono::milliseconds>((x).elapsed_time()).count()
 
 	
@@ -91,41 +126,31 @@ int main()
 	DWT->LAR = 0xC5ACCE55;
 	DWT->CYCCNT = 0;
 	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-
-        uint32_t start;
-        uint32_t stop;
-        uint32_t delta;
-        //uint32_t min = 0;
-        //uint32_t max = 0;
-	//uint32_t t;
-	uint64_t clks;
-	int us;
-	unsigned logn = 9; // set to 9 for 512 parameters, 10 for 1024
-
-	// Just a simple print to know everything works.
-	int i = 1;
-	while(i < 4) {
+	int ret_val = 0;
+	
+	int i = 3;
+	while(i > 0) {
 		wait(1);
-		pc.printf("This program runs since %d seconds.\n", i++);
+		pc.printf("This program runs will run in %d seconds.\n\r", i--);
 		myled = !myled;
 	}
 
-	// TODO: Use actual randomness for this later?
+	/*
+ 	* Falcon code below taken from optimised, using the native FPU.
+	* ret_val outputs 0 if functions work as expected.
+	* comment code out below to switch between Falcon and Dilithium.
+	*/
+	/*
+	unsigned logn = 10; // set to 9 for 512 parameters, 10 for 1024
 	char seed[16] = {0};
 	shake256_context sc;
 	shake256_init_prng_from_seed(&sc, seed, 16);
-
-	// Falcon-512
-	//char privkey[FALCON_PRIVKEY_SIZE(9)] = {0};
-	//char pubkey[FALCON_PUBKEY_SIZE(9)] = {0};
-	//char tmp[FALCON_TMPSIZE_KEYGEN(9)] = {0};
 
 	void *pubkey, *pubkey2, *privkey, *sig, *expkey;// *sigct, *expkey;
 	size_t pubkey_len, privkey_len, sig_len, expkey_len;
 	shake256_context rng;
 	shake256_context hd;
 	uint8_t nonce[40];
-	//void *privkey; 
 	void *tmpsd, *tmpkg, *tmpmp, *tmpvv, *tmpek, *tmpst;
 	size_t tmpkg_len, tmpvv_len, tmpmp_len, tmpsd_len, tmpek_len, tmpst_len;
 	
@@ -133,7 +158,7 @@ int main()
 	
 	pubkey_len  = FALCON_PUBKEY_SIZE(logn);
 	privkey_len = FALCON_PRIVKEY_SIZE(logn);
-	sig_len     = FALCON_SIG_VARTIME_MAXSIZE(logn);
+	sig_len     = FALCON_SIG_CT_SIZE(logn);
 	expkey_len  = FALCON_EXPANDEDKEY_SIZE(logn);
 	
 	tmpsd_len   = FALCON_TMPSIZE_SIGNDYN(logn);
@@ -157,71 +182,135 @@ int main()
 	tmpek       = xmalloc(tmpek_len);
 	tmpst       = xmalloc(tmpst_len);
 
-	clks = 0;
+	pc.printf("-------------------\n\r");
+	pc.printf("| Starting Falcon |\n\r");
+	pc.printf("-------------------\n\r");
 
-	int ret_val = 0;
+	pc.printf("------------------------\n\r");
+	pc.printf("| Doing Key Generation |\n\r");
+	pc.printf("------------------------\n\r");
 
-	memset(privkey, 0, privkey_len);
-	memset(pubkey, 0, pubkey_len);
-	pc.printf("Doing KeyGen\n");
-
-	ret_val = falcon_keygen_make(&rng, logn, privkey, privkey_len,
-			pubkey, pubkey_len, tmpkg, tmpkg_len);	
-        
-        pc.printf("keygen failed if nonzero: %d\n", ret_val);
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		memset(privkey, 0, privkey_len);
+		memset(pubkey, 0, pubkey_len);
+		CALC_START
+		ret_val = falcon_keygen_make(&rng, logn, privkey, privkey_len,
+				pubkey, pubkey_len, tmpkg, tmpkg_len);
+		CALC_STOP
+	}
+	CALC_AVG
+		
+	pc.printf("Key Generation clock cycles taken: %lld\n\r", delta);
+        pc.printf("Key Generation time taken in microsecs: %d\n\r", us);
+        pc.printf("Key Generation failed if nonzero: %d\n\r", ret_val);
         
 	memset(pubkey2, 0xFF, pubkey_len);
 	ret_val = falcon_make_public(pubkey2, pubkey_len,
 			privkey, privkey_len, tmpmp, tmpmp_len);
-        pc.printf("makepub failed if nonzero: %d\n", ret_val);
-	//check_eq(pubkey, pubkey2, pubkey_len, "pub / repub");
+        pc.printf("Make Public failed if nonzero: %d\n\r", ret_val);
+	check_eq(pubkey, pubkey2, pubkey_len, "pub / repub");
+		
+	pc.printf("-----------------------\n\r");
+	pc.printf("| Doing Signing (dyn) |\n\r");
+	pc.printf("-----------------------\n\r");
 
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		memset(sig, 0, sig_len);
+		CALC_START
+		ret_val = falcon_sign_dyn(&rng, sig, &sig_len, FALCON_SIG_CT,
+				privkey, privkey_len, "data1", 5, tmpsd, tmpsd_len);
+		CALC_STOP
+	}
+	CALC_AVG
+	
+	pc.printf("Signing (dyn) clock cycles taken: %lld\n\r", delta);
+        pc.printf("Signing (dyn) time taken in microsecs: %d\n\r", us);
+        pc.printf("Signing (dyn) failed if nonzero: %d\n\r", ret_val);
 
-	timer.reset();
-	timer.start();
-	start = DWT->CYCCNT;
+	pc.printf("-------------------\n\r");	
+	pc.printf("| Doing Verifying |\n\r");
+	pc.printf("-------------------\n\r");	
+	
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		CALC_START			
+		ret_val = falcon_verify(sig, sig_len, FALCON_SIG_CT, pubkey, 
+				pubkey_len, "data1", 5, tmpvv, tmpvv_len);
+		CALC_STOP
+	}
+	CALC_AVG
+	
+	pc.printf("Verifying clock cycles taken: %lld\n\r", delta);
+        pc.printf("Verifying time taken in microsecs: %d\n\r", us);
+	pc.printf("Verifying failed if nonzero: %d\n\r", ret_val);
 
-	pc.printf("Doing Signing\n");
-	memset(sig, 0, sig_len);	
-	ret_val = falcon_sign_dyn(&rng, sig, &sig_len,
-			privkey, privkey_len,
-			"data1", 5, 0, tmpsd, tmpsd_len);
-        pc.printf("sign_dyn failed if nonzero: %d\n", ret_val);	
-        
-	stop  = DWT->CYCCNT;
-	us    = timer.read_us();
-	delta = stop - start;
+	pc.printf("----------------------------\n\r");
+	pc.printf("| Doing Expand Private Key |\n\r");
+	pc.printf("----------------------------\n\r");
 	
-	pc.printf("Doing Verifying\n");			
-	ret_val = falcon_verify(sig, sig_len, pubkey, 
-			pubkey_len, "data1", 5, tmpvv, tmpvv_len);
-	pc.printf("verify failed if nonzero: %d\n", ret_val);
-	
-	pc.printf("Doing expand private key\n");			
-	ret_val = falcon_expand_privkey(expkey, expkey_len,
-			privkey, privkey_len, tmpek, tmpek_len);
-	pc.printf("expand_privkey failed if nonzero: %d\n", ret_val);
-	
-	pc.printf("Doing signing (tree)\n");	
-	sig_len = FALCON_SIG_VARTIME_MAXSIZE(logn);		
-	memset(sig, 0, sig_len);
-	ret_val = falcon_sign_tree(&rng, sig, &sig_len, expkey,
-		"data1", 5, 0, tmpst, tmpst_len);
-	pc.printf("sign_tree failed if nonzero: %d\n", ret_val);
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		CALC_START			
+		ret_val = falcon_expand_privkey(expkey, expkey_len,
+				privkey, privkey_len, tmpek, tmpek_len);
+		CALC_STOP
+	}
+	CALC_AVG
 
-	pc.printf("Doing verify 2\n");			
-	ret_val = falcon_verify(sig, sig_len, pubkey, pubkey_len, 
-				"data1", 5, tmpvv, tmpvv_len);
-	pc.printf("verify 2 failed if nonzero: %d\n", ret_val);
+	pc.printf("Expand private key clock cycles taken: %lld\n\r", delta);
+        pc.printf("Expand private key time taken in microsecs: %d\n\r", us);
+	pc.printf("Expand private key failed if nonzero: %d\n\r", ret_val);
+
+	pc.printf("------------------------\n\r");	
+	pc.printf("| Doing Signing (tree) |\n\r");
+	pc.printf("------------------------\n\r");	
 	
-	pc.printf("Falcon finished\n");
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		memset(sig, 0, sig_len);
+		CALC_START		
+		ret_val = falcon_sign_tree(&rng, sig, &sig_len, FALCON_SIG_CT, expkey,
+			"data1", 5, tmpst, tmpst_len);
+		CALC_STOP
+	}
+	CALC_AVG
+	
+	pc.printf("Signing tree clock cycles taken: %lld\n\r", delta);
+        pc.printf("Signing tree time taken in microsecs: %d\n\r", us);
+	pc.printf("Signing tree failed if nonzero: %d\n\r", ret_val);
+
+	pc.printf("---------------------\n\r");
+	pc.printf("| Doing Verifying 2 |\n\r");			
+	pc.printf("---------------------\n\r");
+	
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		CALC_START
+		ret_val = falcon_verify(sig, sig_len, FALCON_SIG_CT, pubkey, pubkey_len, 
+					"data1", 5, tmpvv, tmpvv_len);
+		CALC_STOP
+	}
+	CALC_AVG
+
+	pc.printf("Verifying 2 clock cycles taken: %lld\n\r", delta);
+        pc.printf("Verifying 2 time taken in microsecs: %d\n\r", us);
+	pc.printf("Verifying 2 failed if nonzero: %d\n\r", ret_val);
+
+        pc.printf("-------------------\n\r");	
+	pc.printf("| Falcon Finished |\n\r");
+        pc.printf("-------------------\n\r");	
+	fflush(stdout);
+	*/
 	
 	/*
  	* Dilithium Round 3 code using pqm4 as it's faster than pqclean.
+ 	* change Dilithium's parameters in config.h to either 2, 3, or 5.
 	* ret_val outputs 0 if functions work as expected.
 	* comment code out below to switch between Falcon and Dilithium.
 	*/
-	/*
+
 	#define MLEN 59
 	size_t mlen, smlen;
 	uint8_t pk[CRYPTO_PUBLICKEYBYTES] = {0};
@@ -230,42 +319,81 @@ int main()
 	uint8_t m2[MLEN + CRYPTO_BYTES];
 	uint8_t sm[MLEN + CRYPTO_BYTES];
 	randombytes(m, MLEN);
+	        
+	fflush(stdout);
 
-	ret_val = crypto_sign_keypair(pk, sk);
-
-	ret_val = crypto_sign(sm, &smlen, m, MLEN, sk);
-
-	ret_val = crypto_sign_open(m2, &mlen, sm, smlen, pk);
+	pc.printf("----------------------\n\r");
+	pc.printf("| Starting Dilithium |\n\r");
+	pc.printf("----------------------\n\r");
 	
-	timer.reset();
-	timer.start();
-	start = DWT->CYCCNT;
-		
-	ret_val = crypto_sign_verify(sm, CRYPTO_BYTES, m, MLEN, pk);
+	pc.printf("------------------------\n\r");
+	pc.printf("| Doing Key Generation |\n\r");
+	pc.printf("------------------------\n\r");
+	
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		CALC_START
+		ret_val = crypto_sign_keypair(pk, sk);
+		CALC_STOP
+	}
+	CALC_AVG
+	
+	pc.printf("Key Generation clock cycles taken: %lld\n\r", delta);
+        pc.printf("Key Generation time taken in microsecs: %d\n\r", us);
+        pc.printf("Key Generation failed if nonzero: %d\n\r", ret_val);
+	
+	pc.printf("-----------------\n\r");
+	pc.printf("| Doing Signing |\n\r");
+	pc.printf("-----------------\n\r");
+	
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND/20; r++) {
+		CALC_START
+		ret_val = crypto_sign(sm, &smlen, m, MLEN, sk);
+		CALC_STOP
+	}
+	CALC_AVG
+	
+	pc.printf("Signing clock cycles taken: %lld\n\r", delta);
+        pc.printf("Signing time taken in microsecs: %d\n\r", us);
+	pc.printf("Signing failed if nonzero: %d\n\r", ret_val);
 
-	stop  = DWT->CYCCNT;
-	us    = timer.read_us();
-	delta = stop - start;	
-	*/	
+	pc.printf("------------------------\n\r");
+	pc.printf("| Doing Signing (open) |\n\r");
+	pc.printf("------------------------\n\r");
 
-	pc.printf("Clock cycles taken: %lu\n", delta);
-        pc.printf("Time taken in microsecs %d\n", us);
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		CALC_START
+		ret_val = crypto_sign_open(m2, &mlen, sm, smlen, pk);
+		CALC_STOP
+	}
+	CALC_AVG
+	
+	pc.printf("Signing (open) clock cycles taken: %lld\n\r", delta);
+        pc.printf("Signing (open) time taken in microsecs: %d\n\r", us);
+	pc.printf("Signing (open) failed if nonzero: %d\n\r", ret_val);
 
-	pc.printf("Clock cycles taken: %llu\n", clks);
-        //pc.printf("Time taken in ms %d\n", ms);
-        
-	//Enable Interrupts;
-	//delta = stop - start;
-	//if (max < delta) {
-	//	max = delta;
-	//}
-	//if (min > delta) {
-	//	min = delta;
-	//}
+	pc.printf("-------------------\n\r");
+	pc.printf("| Doing Verifying |\n\r");
+	pc.printf("-------------------\n\r");
 
-	// Print status code over serial. 0 means success!
-	pc.printf("Output Zero if Falcon is Correct: ");
-	pc.printf(std::to_string(ret_val).c_str());
-	pc.printf("\n");
-	fflush(stdout);		
+	CALC_RESET
+	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		CALC_START	
+		ret_val = crypto_sign_verify(sm, CRYPTO_BYTES, m, MLEN, pk);
+		CALC_STOP
+	}
+	CALC_AVG
+	
+	pc.printf("Verifying clock cycles taken: %lld\n\r", delta);
+        pc.printf("Verifying time taken in microsecs: %d\n\r", us);
+	pc.printf("Verifying failed if nonzero: %d\n\r", ret_val);
+	
+	pc.printf("----------------------\n\r");
+	pc.printf("| Dilithium Finished |\n\r");
+	pc.printf("----------------------\n\r");
+	
+	fflush(stdout);
+			
 }

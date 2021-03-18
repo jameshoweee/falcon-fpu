@@ -2205,6 +2205,12 @@ poly_sub_scaled_ntt(uint32_t *restrict F, size_t Flen, size_t Fstride,
 
 /* ==================================================================== */
 
+#if FALCON_KG_CHACHA20  // yyyKG_CHACHA20+1
+
+#define RNG_CONTEXT   prng
+#define get_rng_u64   prng_get_u64
+
+#else  // yyyKG_CHACHA20+0
 
 #define RNG_CONTEXT   inner_shake256_context
 
@@ -2221,6 +2227,18 @@ get_rng_u64(inner_shake256_context *rng)
 	 * We enforce little-endian representation.
 	 */
 
+#if FALCON_LE  // yyyLE+1
+	/*
+	 * On little-endian systems we just interpret the bytes "as is"
+	 * (this is correct because the exact-width types such as
+	 * 'uint64_t' are guaranteed to have no padding and no trap
+	 * representation).
+	 */
+	uint64_t r;
+
+	inner_shake256_extract(rng, (uint8_t *)&r, sizeof r);
+	return r;
+#else  // yyyLE+0
 	uint8_t tmp[8];
 
 	inner_shake256_extract(rng, tmp, sizeof tmp);
@@ -2232,8 +2250,10 @@ get_rng_u64(inner_shake256_context *rng)
 		| ((uint64_t)tmp[5] << 40)
 		| ((uint64_t)tmp[6] << 48)
 		| ((uint64_t)tmp[7] << 56);
+#endif  // yyyLE-
 }
 
+#endif  // yyyKG_CHACHA20-
 
 /*
  * Table below incarnates a discrete Gaussian distribution:
@@ -4139,9 +4159,17 @@ Zf(keygen)(inner_shake256_context *rng,
 	size_t n, u;
 	uint16_t *h2, *tmp2;
 	RNG_CONTEXT *rc;
+#if FALCON_KG_CHACHA20  // yyyKG_CHACHA20+1
+	prng p;
+#endif  // yyyKG_CHACHA20-
 
 	n = MKN(logn);
+#if FALCON_KG_CHACHA20  // yyyKG_CHACHA20+1
+	Zf(prng_init)(&p, rng);
+	rc = &p;
+#else // yyyKG_CHACHA20+0
 	rc = rng;
+#endif  // yyyKG_CHACHA20-
 
 	/*
 	 * We need to generate f and g randomly, until we find values
