@@ -491,12 +491,12 @@ int shake256_init_prng_from_system(shake256_context *sc);
  *
  * Returned value: 0 on success, or a negative error code.
  */
-int falcon_keygen_make(
-	shake256_context *rng,
-	unsigned logn,
-	void *privkey, size_t privkey_len,
-	void *pubkey, size_t pubkey_len,
-	void *tmp, size_t tmp_len);
+/*int falcon_keygen_make(*/
+/*	shake256_context *rng,*/
+/*	unsigned logn,*/
+/*	void *privkey, size_t privkey_len,*/
+/*	void *pubkey, size_t pubkey_len,*/
+/*	void *tmp, size_t tmp_len);*/
 
 /*
  * Recompute the public key from the private key.

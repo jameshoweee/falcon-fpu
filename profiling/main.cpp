@@ -4,8 +4,14 @@
 #include "mbed.h"
 #include "stm32f7xx_hal.h"
 
+// for testing falcon
+#include <stdio.h>
+#include <time.h>
+#include <math.h>
+
 extern "C" {
 #include "falcon-20201020/falcon.h"
+#include "falcon-20201020/inner.h"
 #include "dilithium-pqm4/api.h"
 #include "dilithium-pqm4/config.h"
 #include "dilithium-pqm4/keccakf1600.h"
@@ -82,6 +88,124 @@ int randombytes(uint8_t *obuf, size_t len)
 	return 0;
 }
 
+static inline uint8_t *
+align_u64(void *tmp)
+{
+	uint8_t *atmp;
+	unsigned off;
+
+	atmp = (uint8_t*)tmp;
+	off = (uintptr_t)atmp & 7u;
+	if (off != 0) {
+		atmp += 8u - off;
+	}
+	return atmp;
+}
+
+static inline uint8_t *
+align_u16(void *tmp)
+{
+	uint8_t *atmp;
+
+	atmp = (uint8_t*)tmp;
+	if (((uintptr_t)atmp & 1u) != 0) {
+		atmp ++;
+	}
+	return atmp;
+}
+
+/* see falcon.h */
+int
+falcon_keygen_make(
+	shake256_context *rng,
+	unsigned logn,
+	void *privkey, size_t privkey_len,
+	void *pubkey, size_t pubkey_len,
+	void *tmp, size_t tmp_len)
+{
+	int8_t *f, *g, *F;
+	uint16_t *h;
+	uint8_t *atmp;
+	size_t n, u, v, sk_len, pk_len;
+	uint8_t *sk, *pk;
+	unsigned oldcw;
+
+	/*
+	 * Check parameters.
+	 */
+	if (logn < 1 || logn > 10) {
+		return FALCON_ERR_BADARG;
+	}
+	if (privkey_len < FALCON_PRIVKEY_SIZE(logn)
+		|| (pubkey != NULL && pubkey_len < FALCON_PUBKEY_SIZE(logn))
+		|| tmp_len < FALCON_TMPSIZE_KEYGEN(logn))
+	{
+		return FALCON_ERR_SIZE;
+	}
+
+	/*
+	 * Prepare buffers and generate private key.
+	 */
+	n = (size_t)1 << logn;
+	f = (int8_t*)tmp;
+	g = f + n;
+	F = g + n;
+	atmp = align_u64(F + n);
+	oldcw = set_fpu_cw(2);
+	Zf(keygen)((inner_shake256_context *)rng,
+		f, g, F, NULL, NULL, logn, atmp);
+	set_fpu_cw(oldcw);
+
+	/*
+	 * Encode private key.
+	 */
+	sk = (uint8_t*)privkey;
+	sk_len = FALCON_PRIVKEY_SIZE(logn);
+	sk[0] = 0x50 + logn;
+	u = 1;
+	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
+		f, logn, Zf(max_fg_bits)[logn]);
+	if (v == 0) {
+		return FALCON_ERR_INTERNAL;
+	}
+	u += v;
+	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
+		g, logn, Zf(max_fg_bits)[logn]);
+	if (v == 0) {
+		return FALCON_ERR_INTERNAL;
+	}
+	u += v;
+	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
+		F, logn, Zf(max_FG_bits)[logn]);
+	if (v == 0) {
+		return FALCON_ERR_INTERNAL;
+	}
+	u += v;
+	if (u != sk_len) {
+		return FALCON_ERR_INTERNAL;
+	}
+
+	/*
+	 * Recompute public key and encode it.
+	 */
+	if (pubkey != NULL) {
+		h = (uint16_t *)align_u16(g + n);
+		atmp = (uint8_t *)(h + n);
+		if (!Zf(compute_public)(h, f, g, logn, atmp)) {
+			return FALCON_ERR_INTERNAL;
+		}
+		pk = (uint8_t*)pubkey;
+		pk_len = FALCON_PUBKEY_SIZE(logn);
+		pk[0] = 0x00 + logn;
+		v = Zf(modq_encode)(pk + 1, pk_len - 1, h, logn);
+		if (v != pk_len - 1) {
+			return FALCON_ERR_INTERNAL;
+		}
+	}
+
+	return 0;
+}
+
 int main()
 {
 	#define BENCHMARK_ROUND 100
@@ -115,12 +239,9 @@ int main()
 	
 	#define CALC_AVG {				\
 	}
-	//		delta = average_clk / BENCHMARK_ROUND;  \
-	//		us    = average_us  / BENCHMARK_ROUND;  \
 
 	#define timer_read_ms(x)    chrono::duration_cast<chrono::milliseconds>((x).elapsed_time()).count()
 
-	
 	//set so that cycle counter can be read from  DWT->CYCCNT
 	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 	DWT->LAR = 0xC5ACCE55;
@@ -140,8 +261,8 @@ int main()
 	* ret_val outputs 0 if functions work as expected.
 	* comment code out below to switch between Falcon and Dilithium.
 	*/
-	/*
-	unsigned logn = 10; // set to 9 for 512 parameters, 10 for 1024
+
+	unsigned logn = 9; // set to 9 for 512 parameters, 10 for 1024
 	char seed[16] = {0};
 	shake256_context sc;
 	shake256_init_prng_from_seed(&sc, seed, 16);
@@ -302,15 +423,15 @@ int main()
 	pc.printf("| Falcon Finished |\n\r");
         pc.printf("-------------------\n\r");	
 	fflush(stdout);
-	*/
 	
+
 	/*
  	* Dilithium Round 3 code using pqm4 as it's faster than pqclean.
  	* change Dilithium's parameters in config.h to either 2, 3, or 5.
 	* ret_val outputs 0 if functions work as expected.
 	* comment code out below to switch between Falcon and Dilithium.
 	*/
-
+	/*
 	#define MLEN 59
 	size_t mlen, smlen;
 	uint8_t pk[CRYPTO_PUBLICKEYBYTES] = {0};
@@ -395,5 +516,6 @@ int main()
 	pc.printf("----------------------\n\r");
 	
 	fflush(stdout);
+	*/
 			
 }
