@@ -51,12 +51,12 @@ OBJECTS += main.o
 OBJECTS += falcon-20201020/codec.o falcon-20201020/common.o falcon-20201020/falcon.o falcon-20201020/fft.o
 OBJECTS += falcon-20201020/fpr.o falcon-20201020/keygen.o falcon-20201020/rng.o 
 OBJECTS += falcon-20201020/shake.o falcon-20201020/sign.o falcon-20201020/vrfy.o
-OBJECTS += dilithium-pqm4/ntt.o dilithium-pqm4/packing.o dilithium-pqm4/pointwise_mont.o
-OBJECTS += dilithium-pqm4/poly.o dilithium-pqm4/polyvec.o dilithium-pqm4/rounding.o
-OBJECTS += dilithium-pqm4/sign.o dilithium-pqm4/symmetric-shake.o dilithium-pqm4/vector.o
-OBJECTS += dilithium-pqm4/fips202.o dilithium-pqm4/keccakf1600.o
+#OBJECTS += dilithium-pqm4/ntt.o dilithium-pqm4/packing.o dilithium-pqm4/pointwise_mont.o
+#OBJECTS += dilithium-pqm4/poly.o dilithium-pqm4/polyvec.o dilithium-pqm4/rounding.o
+#OBJECTS += dilithium-pqm4/sign.o dilithium-pqm4/symmetric-shake.o dilithium-pqm4/vector.o
+#OBJECTS += dilithium-pqm4/fips202.o dilithium-pqm4/keccakf1600.o
 INCLUDE_PATHS += -I../falcon-20201020/
-INCLUDE_PATHS += -I../dilithium-pqm4/
+#INCLUDE_PATHS += -I../dilithium-pqm4/
 
 SYS_OBJECTS += ../mbed/TARGET_NUCLEO_F767ZI/TOOLCHAIN_GCC_ARM/*.o
 
