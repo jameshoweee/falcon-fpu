@@ -49,7 +49,7 @@ PROJECT := FALCON-NUCLEO-F767ZI
 OBJECTS += main.o
 # Falcon specific imports
 OBJECTS += falcon-20201020/codec.o falcon-20201020/common.o falcon-20201020/falcon.o falcon-20201020/fft.o
-OBJECTS += falcon-20201020/fpr.o falcon-20201020/keygen.o falcon-20201020/rng.o 
+OBJECTS += falcon-20201020/fpr.o falcon-20201020/rng.o #falcon-20201020/keygen.o
 OBJECTS += falcon-20201020/shake.o falcon-20201020/sign.o falcon-20201020/vrfy.o
 #OBJECTS += dilithium-pqm4/ntt.o dilithium-pqm4/packing.o dilithium-pqm4/pointwise_mont.o
 #OBJECTS += dilithium-pqm4/poly.o dilithium-pqm4/polyvec.o dilithium-pqm4/rounding.o

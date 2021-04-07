@@ -3588,9 +3588,12 @@ test_sampler(void)
 	isigma = fpr_div(fpr_of(10), fpr_of(17));
 	mu = fpr_neg(fpr_one);
 	muinc = fpr_div(fpr_one, fpr_of(10));
+	printf("sample: %.8f\n", muinc);
 	for (i = 0; i < 21; i ++) {
 		test_sampler_rand(&sc, mu, isigma);
+		printf("sample: %.8f\n", sc);
 		mu = fpr_add(mu, muinc);
+		printf("sample: %.8f\n", mu);
 
 		printf(".");
 		fflush(stdout);

@@ -1,0 +1,157 @@
+-------------------------
+Testing multiplication...
+-------------------------
+-------------------
+32->32 mult........
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        13
+Std dev of clock cycles: 1.6
+Std err of clock cycles: 0.0
+-------------------
+32->64 mult........
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+MUL15 mult.........
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+MUL31 mult.........
+Avg clock cycles:        3
+Min clock cycles:        1
+Max clock cycles:        18
+Std dev of clock cycles: 14.6
+Std err of clock cycles: 0.1
+-------------------
+64->64 mult........
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        18
+Std dev of clock cycles: 10.2
+Std err of clock cycles: 0.1
+-------------------
+float->float mult..
+mult by zero causes hard fault(?)
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        18
+Std dev of clock cycles: 4.8
+Std err of clock cycles: 0.0
+-------------------
+float->double mult.
+mult by zero causes hard fault(?)
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+double->double mult
+mult by zero causes hard fault(?)
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------------
+Testing Division.........
+-------------------------
+-------------------
+32->32 div.........
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->64 div.........
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+64->64 div.........
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------------
+Testing L/R shifts.......
+-------------------------
+-------------------
+32->32 lshift......
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->32 rshift......
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->64 lshift......
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->64 rshift......
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+64->64 lshift......
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+64->64 rshift......
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------------
+Testing Sqrt.............
+-------------------------
+-------------------
+32->32 sqrt........
+Avg clock cycles:        15
+Min clock cycles:        15
+Max clock cycles:        16
+Std dev of clock cycles: 0.2
+Std err of clock cycles: 0.0
+-------------------
+32->64 sqrt........
+Avg clock cycles:        20
+Min clock cycles:        20
+Max clock cycles:        40
+Std dev of clock cycles: 12.5
+Std err of clock cycles: 0.1
+-------------------
+64->64 sqrt........
+Avg clock cycles:        87
+Min clock cycles:        57
+Max clock cycles:        136
+Std dev of clock cycles: 36.9
+Std err of clock cycles: 0.3
+Testing finished
+

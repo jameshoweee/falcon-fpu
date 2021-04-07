@@ -4,6 +4,11 @@
 #include "mbed.h"
 #include "stm32f7xx_hal.h"
 
+//included to change clock freq
+#include "mbed/TARGET_NUCLEO_F767ZI/TOOLCHAIN_GCC_ARM/system_stm32f7xx.h"
+#include "mbed/TARGET_NUCLEO_F767ZI/TOOLCHAIN_GCC_ARM/stm32f7xx_ll_rcc.h"
+#include "mbed/TARGET_NUCLEO_F767ZI/TOOLCHAIN_GCC_ARM/stm32f7xx_hal_rcc.h"
+
 // for testing falcon
 #include <stdio.h>
 #include <time.h>
@@ -12,23 +17,18 @@
 extern "C" {
 #include "falcon-20201020/falcon.h"
 #include "falcon-20201020/inner.h"
-//#include "dilithium-pqm4/api.h"
-//#include "dilithium-pqm4/config.h"
-//#include "dilithium-pqm4/keccakf1600.h"
-//#include "dilithium-pqm4/ntt.h"
-//#include "dilithium-pqm4/packing.h"
-//#include "dilithium-pqm4/params.h"
-//#include "dilithium-pqm4/pointwise_mont.h"
-//#include "dilithium-pqm4/poly.h"
-//#include "dilithium-pqm4/polyvec.h"
-//#include "dilithium-pqm4/randombytes.h"
-//#include "dilithium-pqm4/reduce.h"
-//#include "dilithium-pqm4/rounding.h"
-//#include "dilithium-pqm4/sign.h"
-//#include "dilithium-pqm4/symmetric.h"
-//#include "dilithium-pqm4/vector.h"
 }
 
+//------------------------------------
+// Hyperterminal configuration
+// 115200 bauds, 8-bit data, no parity
+//------------------------------------
+
+Serial pc(SERIAL_TX, SERIAL_RX, 115200);
+DigitalOut myled(LED1);
+Timer timer;
+
+//unsigned logn = 9; // set to 9 for 512 parameters, 10 for 1024
 #define MKN(logn)   ((size_t)1 << (logn))
 #define RNG_CONTEXT   inner_shake256_context
 
@@ -39,7 +39,7 @@ extern "C" {
  * We implement a few functions for computing modulo a small integer p.
  *
  * All functions require that 2^30 < p < 2^31. Moreover, operands must
- * be in the 0..p-1 range.
+ * be in the 0--p-1 range.
  *
  * Modular addition and subtraction work for all such p.
  *
@@ -91,6 +91,13 @@ extern "C" {
  * are listed in decreasing order.
  */
 
+/*
+ * Get a random 8-byte integer from a SHAKE-based RNG. This function
+ * ensures consistent interpretation of the SHAKE output so that
+ * the same values will be obtained over different platforms, in case
+ * a known seed is used.
+ */
+ 
 typedef struct {
 	uint32_t p;
 	uint32_t g;
@@ -622,6 +629,22 @@ static const small_prime PRIMES[] = {
 	{ 0, 0, 0 }
 };
 
+static void *
+xmalloc(size_t len)
+{
+	void *buf;
+
+	if (len == 0) {
+		return NULL;
+	}
+	buf = malloc(len);
+	if (buf == NULL) {
+		fprintf(stderr, "memory allocation error\n");
+		exit(EXIT_FAILURE);
+	}
+	return buf;
+}
+
 /*
  * Reduce a small signed integer modulo a small prime. The source
  * value x MUST be such that -p < x < p.
@@ -937,7 +960,7 @@ static const uint16_t REV10[] = {
  * p must be a prime such that p = 1 mod 2048.
  */
 static void
-modp_mkgm2(uint32_t  gm, uint32_t  igm, unsigned logn,
+modp_mkgm2(uint32_t * gm, uint32_t * igm, unsigned logn,
 	uint32_t g, uint32_t p, uint32_t p0i)
 {
 	size_t u, n;
@@ -960,8 +983,7 @@ modp_mkgm2(uint32_t  gm, uint32_t  igm, unsigned logn,
 	k = 10 - logn;
 	x1 = x2 = modp_R(p);
 	for (u = 0; u < n; u ++) {
-		//size_t v;
-		uint32_t v;
+		size_t v;
 
 		v = REV10[u << k];
 		gm[v] = x1;
@@ -973,7 +995,7 @@ modp_mkgm2(uint32_t  gm, uint32_t  igm, unsigned logn,
 
 /*
  * Compute the NTT over a polynomial (binary case). Polynomial elements
- * are a[0], a[stride], a[2 * stride]...
+ * are a[0], a[stride], a[2 * stride]---
  */
 static void
 modp_NTT2_ext(uint32_t *a, size_t stride, const uint32_t *gm, unsigned logn,
@@ -1143,7 +1165,7 @@ modp_poly_rec_res(uint32_t *f, unsigned logn,
  * still performed, and the carry is computed and returned.
  */
 static uint32_t
-zint_sub(uint32_t  a, const uint32_t  b, size_t len,
+zint_sub(uint32_t * a, const uint32_t * b, size_t len,
 	uint32_t ctl)
 {
 	size_t u;
@@ -1243,8 +1265,8 @@ zint_mod_small_signed(const uint32_t *d, size_t dlen,
  * not overlap.
  */
 static void
-zint_add_mul_small(uint32_t  x,
-	const uint32_t  y, size_t len, uint32_t s)
+zint_add_mul_small(uint32_t * x,
+	const uint32_t * y, size_t len, uint32_t s)
 {
 	size_t u;
 	uint32_t cc;
@@ -1269,7 +1291,7 @@ zint_add_mul_small(uint32_t  x,
  * untouched. The two integers x and p are encoded over the same length.
  */
 static void
-zint_norm_zero(uint32_t  x, const uint32_t  p, size_t len)
+zint_norm_zero(uint32_t * x, const uint32_t * p, size_t len)
 {
 	size_t u;
 	uint32_t r, bb;
@@ -1326,13 +1348,13 @@ zint_norm_zero(uint32_t  x, const uint32_t  p, size_t len)
  * each integer with its multi-word value (little-endian order).
  *
  * If "normalize_signed" is non-zero, then the returned value is
- * normalized to the -m/2..m/2 interval (where m is the product of all
+ * normalized to the -m/2--m/2 interval (where m is the product of all
  * small prime moduli); two's complement is used for negative values.
  */
 static void
-zint_rebuild_CRT(uint32_t  xx, size_t xlen, size_t xstride,
+zint_rebuild_CRT(uint32_t * xx, size_t xlen, size_t xstride,
 	size_t num, const small_prime *primes, int normalize_signed,
-	uint32_t  tmp)
+	uint32_t * tmp)
 {
 	size_t u;
 	uint32_t *x;
@@ -1579,9 +1601,9 @@ zint_co_reduce_mod(uint32_t *a, uint32_t *b, const uint32_t *m, size_t len,
  * each other, or with either x or y.
  */
 static int
-zint_bezout(uint32_t  u, uint32_t  v,
-	const uint32_t  x, const uint32_t  y,
-	size_t len, uint32_t  tmp)
+zint_bezout(uint32_t * u, uint32_t * v,
+	const uint32_t * x, const uint32_t * y,
+	size_t len, uint32_t * tmp)
 {
 	/*
 	 * Algorithm is an extended binary GCD. We maintain 6 values
@@ -1905,8 +1927,8 @@ zint_bezout(uint32_t  u, uint32_t  v,
  * negative values.
  */
 static void
-zint_add_scaled_mul_small(uint32_t  x, size_t xlen,
-	const uint32_t  y, size_t ylen, int32_t k,
+zint_add_scaled_mul_small(uint32_t * x, size_t xlen,
+	const uint32_t * y, size_t ylen, int32_t k,
 	uint32_t sch, uint32_t scl)
 {
 	size_t u;
@@ -1930,8 +1952,8 @@ zint_add_scaled_mul_small(uint32_t  x, size_t xlen,
 		 */
 		v = u - sch;
 		wy = v < ylen ? y[v] : ysign;
-		wys = ((wy << scl) & 0x7FFFFFFF) | tw;
-		tw = wy >> (31 - scl);
+		wys = ((wy << scl) & 0x7FFFFFFF) | tw; //operation to watch
+		tw = wy >> (31 - scl); //operation to watch
 
 		/*
 		 * The expression below does not overflow.
@@ -1966,8 +1988,8 @@ zint_add_scaled_mul_small(uint32_t  x, size_t xlen,
  * negative values.
  */
 static void
-zint_sub_scaled(uint32_t  x, size_t xlen,
-	const uint32_t  y, size_t ylen, uint32_t sch, uint32_t scl)
+zint_sub_scaled(uint32_t * x, size_t xlen,
+	const uint32_t * y, size_t ylen, uint32_t sch, uint32_t scl)
 {
 	size_t u;
 	uint32_t ysign, tw;
@@ -2096,7 +2118,7 @@ poly_big_to_small(int8_t *d, const uint32_t *s, int lim, unsigned logn)
 /*
  * Subtract k*f from F, where F, f and k are polynomials modulo X^N+1.
  * Coefficients of polynomial k are small integers (signed values in the
- * -2^31..2^31 range) scaled by 2^sc. Value sc is provided as sch = sc / 31
+ * -2^31--2^31 range) scaled by 2^sc. Value sc is provided as sch = sc / 31
  * and scl = sc % 31.
  *
  * This function implements the basic quadratic multiplication algorithm,
@@ -2104,9 +2126,9 @@ poly_big_to_small(int8_t *d, const uint32_t *s, int lim, unsigned logn)
  * high degree.
  */
 static void
-poly_sub_scaled(uint32_t  F, size_t Flen, size_t Fstride,
-	const uint32_t  f, size_t flen, size_t fstride,
-	const int32_t  k, uint32_t sch, uint32_t scl, unsigned logn)
+poly_sub_scaled(uint32_t * F, size_t Flen, size_t Fstride,
+	const uint32_t * f, size_t flen, size_t fstride,
+	const int32_t * k, uint32_t sch, uint32_t scl, unsigned logn)
 {
 	size_t n, u;
 
@@ -2136,15 +2158,15 @@ poly_sub_scaled(uint32_t  F, size_t Flen, size_t Fstride,
 
 /*
  * Subtract k*f from F. Coefficients of polynomial k are small integers
- * (signed values in the -2^31..2^31 range) scaled by 2^sc. This function
+ * (signed values in the -2^31--2^31 range) scaled by 2^sc. This function
  * assumes that the degree is large, and integers relatively small.
  * The value sc is provided as sch = sc / 31 and scl = sc % 31.
  */
 static void
-poly_sub_scaled_ntt(uint32_t  F, size_t Flen, size_t Fstride,
-	const uint32_t  f, size_t flen, size_t fstride,
-	const int32_t  k, uint32_t sch, uint32_t scl, unsigned logn,
-	uint32_t  tmp)
+poly_sub_scaled_ntt(uint32_t * F, size_t Flen, size_t Fstride,
+	const uint32_t * f, size_t flen, size_t fstride,
+	const int32_t * k, uint32_t sch, uint32_t scl, unsigned logn,
+	uint32_t * tmp)
 {
 	uint32_t *gm, *igm, *fk, *t1, *x;
 	const uint32_t *y;
@@ -2205,15 +2227,6 @@ poly_sub_scaled_ntt(uint32_t  F, size_t Flen, size_t Fstride,
 
 /* ==================================================================== */
 
-#if FALCON_KG_CHACHA20  // yyyKG_CHACHA20+1
-
-#define RNG_CONTEXT   prng
-#define get_rng_u64   prng_get_u64
-
-#else  // yyyKG_CHACHA20+0
-
-#define RNG_CONTEXT   inner_shake256_context
-
 /*
  * Get a random 8-byte integer from a SHAKE-based RNG. This function
  * ensures consistent interpretation of the SHAKE output so that
@@ -2227,7 +2240,7 @@ get_rng_u64(inner_shake256_context *rng)
 	 * We enforce little-endian representation.
 	 */
 
-#if FALCON_LE  // yyyLE+1
+//#if FALCON_LE  // yyyLE+1
 	/*
 	 * On little-endian systems we just interpret the bytes "as is"
 	 * (this is correct because the exact-width types such as
@@ -2238,22 +2251,20 @@ get_rng_u64(inner_shake256_context *rng)
 
 	inner_shake256_extract(rng, (uint8_t *)&r, sizeof r);
 	return r;
-#else  // yyyLE+0
-	uint8_t tmp[8];
+//#else  // yyyLE+0
+//	uint8_t tmp[8];
 
-	inner_shake256_extract(rng, tmp, sizeof tmp);
-	return (uint64_t)tmp[0]
-		| ((uint64_t)tmp[1] << 8)
-		| ((uint64_t)tmp[2] << 16)
-		| ((uint64_t)tmp[3] << 24)
-		| ((uint64_t)tmp[4] << 32)
-		| ((uint64_t)tmp[5] << 40)
-		| ((uint64_t)tmp[6] << 48)
-		| ((uint64_t)tmp[7] << 56);
-#endif  // yyyLE-
+//	inner_shake256_extract(rng, tmp, sizeof tmp);
+//	return (uint64_t)tmp[0]
+//		| ((uint64_t)tmp[1] << 8)
+//		| ((uint64_t)tmp[2] << 16)
+//		| ((uint64_t)tmp[3] << 24)
+//		| ((uint64_t)tmp[4] << 32)
+//		| ((uint64_t)tmp[5] << 40)
+//		| ((uint64_t)tmp[6] << 48)
+//		| ((uint64_t)tmp[7] << 56);
+//#endif  // yyyLE-
 }
-
-#endif  // yyyKG_CHACHA20-
 
 /*
  * Table below incarnates a discrete Gaussian distribution:
@@ -2470,6 +2481,53 @@ poly_small_sqnorm(const int8_t *f, unsigned logn)
 	return s | -(ng >> 31);
 }
 
+static inline uint64_t
+fpr_ursh(uint64_t x, int n)
+{
+	x ^= (x ^ (x >> 32)) & -(uint64_t)(n >> 5);
+	return x >> (n & 31);
+}
+
+/*
+ * Right-shift a 64-bit signed value by a possibly secret shift count
+ * (see fpr_ursh() for the rationale).
+ *
+ * Shift count n MUST be in the 0..63 range.
+ */
+static inline int64_t
+fpr_irsh(int64_t x, int n)
+{
+	x ^= (x ^ (x >> 32)) & -(int64_t)(n >> 5);
+	return x >> (n & 31);
+}
+
+/*
+ * Left-shift a 64-bit unsigned value by a possibly secret shift count
+ * (see fpr_ursh() for the rationale).
+ *
+ * Shift count n MUST be in the 0..63 range.
+ */
+static inline uint64_t
+fpr_ulsh(uint64_t x, int n)
+{
+	x ^= (x ^ (x << 32)) & -(uint64_t)(n >> 5);
+	return x << (n & 31);
+}
+
+static inline fpr *
+align_fpr_1(void *tmp)
+{
+	uint8_t *atmp;
+	unsigned off;
+
+	atmp = (uint8_t *)tmp;
+	off = (uintptr_t)atmp & 7u;
+	if (off != 0) {
+		atmp += 8u - off;
+	}
+	return (fpr *)atmp;
+}
+
 /*
  * Align (upwards) the provided 'data' pointer with regards to 'base'
  * so that the offset is a multiple of the size of 'fpr'.
@@ -2480,8 +2538,8 @@ align_fpr(void *base, void *data)
 	uint8_t *cb, *cd;
 	size_t k, km;
 
-	cb = base;
-	cd = data;
+	cb = (uint8_t *)base;
+	cd = (uint8_t *)data;
 	k = (size_t)(cd - cb);
 	km = k % sizeof(fpr);
 	if (km) {
@@ -2500,14 +2558,40 @@ align_u32(void *base, void *data)
 	uint8_t *cb, *cd;
 	size_t k, km;
 
-	cb = base;
-	cd = data;
+	cb = (uint8_t *)base;
+	cd = (uint8_t *)data;
 	k = (size_t)(cd - cb);
 	km = k % sizeof(uint32_t);
 	if (km) {
 		k += (sizeof(uint32_t)) - km;
 	}
 	return (uint32_t *)(cb + k);
+}
+
+static inline uint8_t *
+align_u64(void *tmp)
+{
+	uint8_t *atmp;
+	unsigned off;
+
+	atmp = (uint8_t *)tmp;
+	off = (uintptr_t)atmp & 7u;
+	if (off != 0) {
+		atmp += 8u - off;
+	}
+	return atmp;
+}
+
+static inline uint8_t *
+align_u16(void *tmp)
+{
+	uint8_t *atmp;
+
+	atmp = (uint8_t *)tmp;
+	if (((uintptr_t)atmp & 1u) != 0) {
+		atmp ++;
+	}
+	return atmp;
 }
 
 /*
@@ -2971,16 +3055,16 @@ solve_NTRU_intermediate(unsigned logn_top,
 		 *
 		 * We compute things in the NTT. We group roots of phi
 		 * such that all roots x in a group share the same x^d.
-		 * If the roots in a group are x_1, x_2... x_d, then:
+		 * If the roots in a group are x_1, x_2--- x_d, then:
 		 *
-		 *   N(f)(x_1^d) = f(x_1)*f(x_2)*...*f(x_d)
+		 *   N(f)(x_1^d) = f(x_1)*f(x_2)*---*f(x_d)
 		 *
 		 * Thus, we have:
 		 *
-		 *   G(x_1) = f(x_2)*f(x_3)*...*f(x_d)*G'(x_1^d)
-		 *   G(x_2) = f(x_1)*f(x_3)*...*f(x_d)*G'(x_1^d)
-		 *   ...
-		 *   G(x_d) = f(x_1)*f(x_2)*...*f(x_{d-1})*G'(x_1^d)
+		 *   G(x_1) = f(x_2)*f(x_3)*---*f(x_d)*G'(x_1^d)
+		 *   G(x_2) = f(x_1)*f(x_3)*---*f(x_d)*G'(x_1^d)
+		 *   ---
+		 *   G(x_d) = f(x_1)*f(x_2)*---*f(x_{d-1})*G'(x_1^d)
 		 *
 		 * In all cases, we can thus compute F and G in NTT
 		 * representation by a few simple multiplications.
@@ -3200,7 +3284,7 @@ solve_NTRU_intermediate(unsigned logn_top,
 		 *
 		 * We want that value to be scaled by 'scale_k', hence we
 		 * apply a corrective scaling. After scaling, the values
-		 * should fit in -2^31-1..+2^31-1.
+		 * should fit in -2^31-1--+2^31-1.
 		 */
 		dc = scale_k - scale_FG + scale_fg;
 
@@ -4106,7 +4190,7 @@ poly_small_mkgauss(RNG_CONTEXT *rng, int8_t *f, unsigned logn)
 		s = mkgauss(rng, logn);
 
 		/*
-		 * We need the coefficient to fit within -127..+127;
+		 * We need the coefficient to fit within -127--+127;
 		 * realistically, this is always the case except for
 		 * the very low degrees (N = 2 or 4), for which there
 		 * is no real security anyway.
@@ -4171,6 +4255,68 @@ Zf(keygen)(inner_shake256_context *rng,
 	rc = rng;
 #endif  // yyyKG_CHACHA20-
 
+	///////////////////////////////////////////////////////
+	// code for taking timing---
+	///////////////////////////////////////////////////////
+	
+	#define BENCHMARK_ROUND 100
+	uint64_t start, stop, delta, delta_old, min, max;
+	int us, cnt;
+	long double average_us, average_clk, avclk_old, var, std_err;
+
+	#define MIN(a,b) (((a)<(b))?(a):(b))
+	#define MAX(a,b) (((a)>(b))?(a):(b))
+
+	#define CALC_RESET {		 \
+		delta       = 0;         \
+		delta_old   = 0;         \
+		var         = 0;         \
+		average_clk = 0;	 \
+		average_us  = 0;	 \
+		delta_old   = 0;         \
+		avclk_old   = 0;         \
+		min         = 9999999999;\
+		max         = 0;         \
+		timer.reset();		 \
+		cnt = 1;		 \
+	}
+	
+	#define CALC_START {		 \
+		wait(0.00001);           \
+		timer.reset();		 \
+		timer.start();		 \
+		start = DWT->CYCCNT;	 \
+	}
+	
+	#define CALC_STOP {		 		 \
+		stop         = DWT->CYCCNT;     	 \
+		us           = timer.read_us(); 	 \
+		delta_old    = delta;                    \
+		avclk_old    = average_clk;              \
+		delta        = stop - start;             \
+		average_clk += (long double)(delta-average_clk)/cnt;	 \
+		var         += (long double)((delta-average_clk)*(delta-avclk_old))/cnt; \
+		average_us  += (long double)(us-average_us)/cnt;	 \
+		min          = MIN(delta,min);           \
+		max          = MAX(delta,max);           \
+		cnt         += 1;			 \
+		wait(0.00001);                           \
+	}
+	
+	#define CALC_AVG {				 \
+		std_err      = sqrt(var/cnt);              \
+	}
+
+	#define timer_read_ms(x)    chrono::duration_cast<chrono::milliseconds>((x).elapsed_time()).count()
+
+	//set so that cycle counter can be read from  DWT->CYCCNT
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->LAR = 0xC5ACCE55;
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	///////////////////////////////////////////////////////
+
+
 	/*
 	 * We need to generate f and g randomly, until we find values
 	 * such that the norm of (g,-f), and of the orthogonalized
@@ -4190,7 +4336,7 @@ Zf(keygen)(inner_shake256_context *rng,
 	 * We require that Res(f,phi) and Res(g,phi) are both odd (the
 	 * NTRU equation solver requires it).
 	 */
-	for (;;) {
+	for (;;1) { // changed by james
 		fpr *rt1, *rt2, *rt3;
 		fpr bnorm;
 		uint32_t normf, normg, norm;
@@ -4202,8 +4348,8 @@ Zf(keygen)(inner_shake256_context *rng,
 		 * (i.e. the resultant of the polynomial with phi
 		 * will be odd).
 		 */
-		poly_small_mkgauss(rc, f, logn);
-		poly_small_mkgauss(rc, g, logn);
+		poly_small_mkgauss(rc, f, logn); // not constant time
+		poly_small_mkgauss(rc, g, logn); // not constant time
 
 		/*
 		 * Verify that all coefficients are within the bounds
@@ -4226,7 +4372,7 @@ Zf(keygen)(inner_shake256_context *rng,
 		}
 		if (lim < 0) {
 			continue;
-		}
+		}		
 
 		/*
 		 * Bound is 1.17*sqrt(q). We compute the squared
@@ -4235,8 +4381,10 @@ Zf(keygen)(inner_shake256_context *rng,
 		 * Since f and g are integral, the squared norm
 		 * of (g,-f) is an integer.
 		 */
+
 		normf = poly_small_sqnorm(f, logn);
 		normg = poly_small_sqnorm(g, logn);
+		
 		norm = (normf + normg) | -((normf | normg) >> 31);
 		if (norm >= 16823) {
 			continue;
@@ -4246,21 +4394,67 @@ Zf(keygen)(inner_shake256_context *rng,
 		 * We compute the orthogonalized vector norm.
 		 */
 		rt1 = (fpr *)tmp;
-		rt2 = rt1 + n;
-		rt3 = rt2 + n;
-		poly_small_to_fp(rt1, f, logn);
-		poly_small_to_fp(rt2, g, logn);
-		Zf(FFT)(rt1, logn);
-		Zf(FFT)(rt2, logn);
+		rt2 = rt1 + n; // takes 1 clk
+		rt3 = rt2 + n; // takes 1 clk
+		
+		pc.printf("-------------------\n\r");
+		pc.printf("poly small to fp---\n\r");
+		CALC_RESET
+		for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+			CALC_START	
+			poly_small_to_fp(rt1, f, logn);
+			poly_small_to_fp(rt2, g, logn);
+			CALC_STOP
+		}
+		CALC_AVG
+		pc.printf("Avg clock cycles:        %.0f\n\r", (average_clk));
+		pc.printf("Min clock cycles:        %lld\n\r", min);
+		pc.printf("Max clock cycles:        %lld\n\r", max);
+		pc.printf("Std dev of clock cycles: %.1f\n\r", (sqrt(var)));
+		pc.printf("Std err of clock cycles: %.1f\n\r", (std_err));
+		
+		pc.printf("-------------------\n\r");
+		pc.printf("FFT calculation---\n\r");
+		CALC_RESET
+		for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+			CALC_START
+			Zf(FFT)(rt1, logn);
+			Zf(FFT)(rt2, logn);
+			CALC_STOP
+		}
+		CALC_AVG
+		pc.printf("Avg clock cycles:        %.0f\n\r", (average_clk));
+		pc.printf("Min clock cycles:        %lld\n\r", min);
+		pc.printf("Max clock cycles:        %lld\n\r", max);
+		pc.printf("Std dev of clock cycles: %.1f\n\r", (sqrt(var)));
+		pc.printf("Std err of clock cycles: %.1f\n\r", (std_err));
+
 		Zf(poly_invnorm2_fft)(rt3, rt1, rt2, logn);
 		Zf(poly_adj_fft)(rt1, logn);
 		Zf(poly_adj_fft)(rt2, logn);
+
 		Zf(poly_mulconst)(rt1, fpr_q, logn);
 		Zf(poly_mulconst)(rt2, fpr_q, logn);
+
 		Zf(poly_mul_autoadj_fft)(rt1, rt3, logn);
 		Zf(poly_mul_autoadj_fft)(rt2, rt3, logn);
-		Zf(iFFT)(rt1, logn);
-		Zf(iFFT)(rt2, logn);
+
+		pc.printf("-------------------\n\r");
+		pc.printf("iFFT calculation---\n\r");
+		CALC_RESET
+		for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+			CALC_START
+			Zf(iFFT)(rt1, logn);
+			Zf(iFFT)(rt2, logn);
+			CALC_STOP
+		}
+		CALC_AVG
+		pc.printf("Avg clock cycles:        %.0f\n\r", (average_clk));
+		pc.printf("Min clock cycles:        %lld\n\r", min);
+		pc.printf("Max clock cycles:        %lld\n\r", max);
+		pc.printf("Std dev of clock cycles: %.1f\n\r", (sqrt(var)));
+		pc.printf("Std err of clock cycles: %.1f\n\r", (std_err));
+		
 		bnorm = fpr_zero;
 		for (u = 0; u < n; u ++) {
 			bnorm = fpr_add(bnorm, fpr_sqr(rt1[u]));
@@ -4299,6 +4493,7 @@ Zf(keygen)(inner_shake256_context *rng,
 		break;
 	}
 }
+
 /* see falcon.h */
 int
 falcon_keygen_make(
@@ -4391,463 +4586,508 @@ falcon_keygen_make(
 	return 0;
 }
 
-/* see falcon.h */
-int
-falcon_sign_start(shake256_context *rng,
-	void *nonce,
-	shake256_context *hash_data)
-{
-	shake256_extract(rng, nonce, 40);
-	shake256_init(hash_data);
-	shake256_inject(hash_data, nonce, 40);
-	return 0;
+///* see falcon.h */
+//int
+//falcon_sign_start(shake256_context *rng,
+//	void *nonce,
+//	shake256_context *hash_data)
+//{
+//	shake256_extract(rng, nonce, 40);
+//	shake256_init(hash_data);
+//	shake256_inject(hash_data, nonce, 40);
+//	return 0;
+//}
+
+///* see falcon.h */
+//int
+//falcon_sign_dyn_finish(shake256_context *rng,
+//	void *sig, size_t *sig_len, int sig_type,
+//	const void *privkey, size_t privkey_len,
+//	shake256_context *hash_data, const void *nonce,
+//	void *tmp, size_t tmp_len)
+//{
+//	unsigned logn;
+//	const uint8_t *sk;
+//	uint8_t *es;
+//	int8_t *f, *g, *F, *G;
+//	uint16_t *hm;
+//	int16_t *sv;
+//	uint8_t *atmp;
+//	size_t u, v, n, es_len;
+//	unsigned oldcw;
+//	inner_shake256_context sav_hash_data;
+
+//	/*
+//	 * Get degree from private key header byte, and check
+//	 * parameters.
+//	 */
+//	if (privkey_len == 0) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	sk = (uint8_t*)privkey;
+//	if ((sk[0] & 0xF0) != 0x50) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	logn = sk[0] & 0x0F;
+//	if (logn < 1 || logn > 10) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	if (privkey_len != FALCON_PRIVKEY_SIZE(logn)) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	if (tmp_len < FALCON_TMPSIZE_SIGNDYN(logn)) {
+//		return FALCON_ERR_SIZE;
+//	}
+//	es_len = *sig_len;
+//	if (es_len < 41) {
+//		return FALCON_ERR_SIZE;
+//	}
+//	switch (sig_type) {
+//	case FALCON_SIG_COMPRESSED:
+//		break;
+//	case FALCON_SIG_PADDED:
+//		if (*sig_len < FALCON_SIG_PADDED_SIZE(logn)) {
+//			return FALCON_ERR_SIZE;
+//		}
+//		break;
+//	case FALCON_SIG_CT:
+//		if (*sig_len < FALCON_SIG_CT_SIZE(logn)) {
+//			return FALCON_ERR_SIZE;
+//		}
+//		break;
+//	default:
+//		return FALCON_ERR_BADARG;
+//	}
+
+//	/*
+//	 * Decode private key elements, and complete private key.
+//	 */
+//	n = (size_t)1 << logn;
+//	f = (int8_t *)tmp;
+//	g = f + n;
+//	F = g + n;
+//	G = F + n;
+//	hm = (uint16_t *)(G + n);
+//	sv = (int16_t *)hm;
+//	atmp = align_u64(hm + n);
+//	u = 1;
+//	v = Zf(trim_i8_decode)(f, logn, Zf(max_fg_bits)[logn],
+//		sk + u, privkey_len - u);
+//	if (v == 0) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	u += v;
+//	v = Zf(trim_i8_decode)(g, logn, Zf(max_fg_bits)[logn],
+//		sk + u, privkey_len - u);
+//	if (v == 0) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	u += v;
+//	v = Zf(trim_i8_decode)(F, logn, Zf(max_FG_bits)[logn],
+//		sk + u, privkey_len - u);
+//	if (v == 0) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	u += v;
+//	if (u != privkey_len) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	if (!Zf(complete_private)(G, f, g, F, logn, atmp)) {
+//		return FALCON_ERR_FORMAT;
+//	}
+
+//	/*
+//	 * Hash message to a point.
+//	 */
+//	shake256_flip(hash_data);
+//	sav_hash_data = *(inner_shake256_context *)hash_data;
+
+//	/*
+//	 * Compute and encode signature.
+//	 */
+//	for (;;) {
+//		/*
+//		 * Hash message to a point. We must redo it when looping
+//		 * (in case of a padded signature format and a failed
+//		 * attempt due to an oversized compressed signature), because
+//		 * we overwrite the hash output with the signature (in order
+//		 * to save some RAM).
+//		 */
+//		*(inner_shake256_context *)hash_data = sav_hash_data;
+//		if (sig_type == FALCON_SIG_CT) {
+//			Zf(hash_to_point_ct)(
+//				(inner_shake256_context *)hash_data,
+//				hm, logn, atmp);
+//		} else {
+//			Zf(hash_to_point_vartime)(
+//				(inner_shake256_context *)hash_data,
+//				hm, logn);
+//		}
+//		oldcw = set_fpu_cw(2);
+//		Zf(sign_dyn)(sv, (inner_shake256_context *)rng,
+//			f, g, F, G, hm, logn, atmp);
+//		set_fpu_cw(oldcw);
+//		es = (uint8_t*)sig;
+//		es_len = *sig_len;
+//		memcpy(es + 1, nonce, 40);
+//		u = 41;
+//		switch (sig_type) {
+//			size_t tu;
+
+//		case FALCON_SIG_COMPRESSED:
+//			es[0] = 0x30 + logn;
+//			v = Zf(comp_encode)(es + u, es_len - u, sv, logn);
+//			if (v == 0) {
+//				return FALCON_ERR_SIZE;
+//			}
+//			break;
+//		case FALCON_SIG_PADDED:
+//			es[0] = 0x30 + logn;
+//			tu = FALCON_SIG_PADDED_SIZE(logn);
+//			v = Zf(comp_encode)(es + u, tu - u, sv, logn);
+//			if (v == 0) {
+//				/*
+//				 * Signature does not fit, loop.
+//				 */
+//				continue;
+//			}
+//			if (u + v < tu) {
+//				memset(es + u + v, 0, tu - (u + v));
+//				v = tu - u;
+//			}
+//			break;
+//		case FALCON_SIG_CT:
+//			es[0] = 0x50 + logn;
+//			v = Zf(trim_i16_encode)(es + u, es_len - u,
+//				sv, logn, Zf(max_sig_bits)[logn]);
+//			if (v == 0) {
+//				return FALCON_ERR_SIZE;
+//			}
+//			break;
+//		}
+//		*sig_len = u + v;
+//		return 0;
+//	}
+//}
+
+///* see falcon.h */
+//int
+//falcon_expand_privkey(void *expanded_key, size_t expanded_key_len,
+//	const void *privkey, size_t privkey_len,
+//	void *tmp, size_t tmp_len)
+//{
+//	unsigned logn;
+//	const uint8_t *sk;
+//	int8_t *f, *g, *F, *G;
+//	uint8_t *atmp;
+//	size_t u, v, n;
+//	fpr *expkey;
+//	unsigned oldcw;
+
+//	/*
+//	 * Get degree from private key header byte, and check
+//	 * parameters.
+//	 */
+//	if (privkey_len == 0) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	sk = (uint8_t*)privkey;
+//	if ((sk[0] & 0xF0) != 0x50) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	logn = sk[0] & 0x0F;
+//	if (logn < 1 || logn > 10) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	if (privkey_len != FALCON_PRIVKEY_SIZE(logn)) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	if (expanded_key_len < FALCON_EXPANDEDKEY_SIZE(logn)
+//		|| tmp_len < FALCON_TMPSIZE_EXPANDPRIV(logn))
+//	{
+//		return FALCON_ERR_SIZE;
+//	}
+
+//	/*
+//	 * Decode private key elements, and complete private key.
+//	 */
+//	n = (size_t)1 << logn;
+//	f = (int8_t *)tmp;
+//	g = f + n;
+//	F = g + n;
+//	G = F + n;
+//	atmp = align_u64(G + n);
+//	u = 1;
+//	v = Zf(trim_i8_decode)(f, logn, Zf(max_fg_bits)[logn],
+//		sk + u, privkey_len - u);
+//	if (v == 0) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	u += v;
+//	v = Zf(trim_i8_decode)(g, logn, Zf(max_fg_bits)[logn],
+//		sk + u, privkey_len - u);
+//	if (v == 0) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	u += v;
+//	v = Zf(trim_i8_decode)(F, logn, Zf(max_FG_bits)[logn],
+//		sk + u, privkey_len - u);
+//	if (v == 0) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	u += v;
+//	if (u != privkey_len) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	if (!Zf(complete_private)(G, f, g, F, logn, atmp)) {
+//		return FALCON_ERR_FORMAT;
+//	}
+
+//	/*
+//	 * Expand private key.
+//	 */
+//	*(uint8_t *)expanded_key = logn;
+//	expkey = align_fpr_1((uint8_t *)expanded_key + 1);
+//	oldcw = set_fpu_cw(2);
+//	Zf(expand_privkey)(expkey, f, g, F, G, logn, atmp);
+//	set_fpu_cw(oldcw);
+//	return 0;
+//}
+
+///* see falcon.h */
+//int
+//falcon_sign_tree_finish(shake256_context *rng,
+//	void *sig, size_t *sig_len, int sig_type,
+//	const void *expanded_key,
+//	shake256_context *hash_data, const void *nonce,
+//	void *tmp, size_t tmp_len)
+//{
+//	unsigned logn;
+//	uint8_t *es;
+//	const fpr *expkey;
+//	uint16_t *hm;
+//	int16_t *sv;
+//	uint8_t *atmp;
+//	size_t u, v, n, es_len;
+//	unsigned oldcw;
+//	inner_shake256_context sav_hash_data;
+
+//	/*
+//	 * Get degree from private key header byte, and check
+//	 * parameters.
+//	 */
+//	logn = *(const uint8_t *)expanded_key;
+//	if (logn < 1 || logn > 10) {
+//		return FALCON_ERR_FORMAT;
+//	}
+//	if (tmp_len < FALCON_TMPSIZE_SIGNTREE(logn)) {
+//		return FALCON_ERR_SIZE;
+//	}
+//	es_len = *sig_len;
+//	if (es_len < 41) {
+//		return FALCON_ERR_SIZE;
+//	}
+//	expkey = (const fpr *)align_fpr_1((uint8_t *)expanded_key + 1);
+//	switch (sig_type) {
+//	case FALCON_SIG_COMPRESSED:
+//		break;
+//	case FALCON_SIG_PADDED:
+//		if (*sig_len < FALCON_SIG_PADDED_SIZE(logn)) {
+//			return FALCON_ERR_SIZE;
+//		}
+//		break;
+//	case FALCON_SIG_CT:
+//		if (*sig_len < FALCON_SIG_CT_SIZE(logn)) {
+//			return FALCON_ERR_SIZE;
+//		}
+//		break;
+//	default:
+//		return FALCON_ERR_BADARG;
+//	}
+
+//	n = (size_t)1 << logn;
+//	hm = (uint16_t *)align_u16(tmp);
+//	sv = (int16_t *)hm;
+//	atmp = align_u64(sv + n);
+
+//	/*
+//	 * Hash message to a point.
+//	 */
+//	shake256_flip(hash_data);
+//	sav_hash_data = *(inner_shake256_context *)hash_data;
+
+//	/*
+//	 * Compute and encode signature.
+//	 */
+//	for (;;) {
+//		/*
+//		 * Hash message to a point. We must redo it when looping
+//		 * (in case of a padded signature format and a failed
+//		 * attempt due to an oversized compressed signature), because
+//		 * we overwrite the hash output with the signature (in order
+//		 * to save some RAM).
+//		 */
+//		*(inner_shake256_context *)hash_data = sav_hash_data;
+//		if (sig_type == FALCON_SIG_CT) {
+//			Zf(hash_to_point_ct)(
+//				(inner_shake256_context *)hash_data,
+//				hm, logn, atmp);
+//		} else {
+//			Zf(hash_to_point_vartime)(
+//				(inner_shake256_context *)hash_data,
+//				hm, logn);
+//		}
+//		oldcw = set_fpu_cw(2);
+//		Zf(sign_tree)(sv, (inner_shake256_context *)rng,
+//			expkey, hm, logn, atmp);
+//		set_fpu_cw(oldcw);
+//		es = (uint8_t*)sig;
+//		es_len = *sig_len;
+//		memcpy(es + 1, nonce, 40);
+//		u = 41;
+//		switch (sig_type) {
+//			size_t tu;
+
+//		case FALCON_SIG_COMPRESSED:
+//			es[0] = 0x30 + logn;
+//			v = Zf(comp_encode)(es + u, es_len - u, sv, logn);
+//			if (v == 0) {
+//				return FALCON_ERR_SIZE;
+//			}
+//			break;
+//		case FALCON_SIG_PADDED:
+//			es[0] = 0x30 + logn;
+//			tu = FALCON_SIG_PADDED_SIZE(logn);
+//			v = Zf(comp_encode)(es + u, tu - u, sv, logn);
+//			if (v == 0) {
+//				/*
+//				 * Signature does not fit, loop.
+//				 */
+//				continue;
+//			}
+//			if (u + v < tu) {
+//				memset(es + u + v, 0, tu - (u + v));
+//				v = tu - u;
+//			}
+//			break;
+//		case FALCON_SIG_CT:
+//			es[0] = 0x50 + logn;
+//			v = Zf(trim_i16_encode)(es + u, es_len - u,
+//				sv, logn, Zf(max_sig_bits)[logn]);
+//			if (v == 0) {
+//				return FALCON_ERR_SIZE;
+//			}
+//			break;
+//		}
+//		*sig_len = u + v;
+//		return 0;
+//	}
+//}
+
+///* see falcon.h */
+//int
+//falcon_sign_dyn(shake256_context *rng,
+//	void *sig, size_t *sig_len, int sig_type,
+//	const void *privkey, size_t privkey_len,
+//	const void *data, size_t data_len,
+//	void *tmp, size_t tmp_len)
+//{
+//	shake256_context hd;
+//	uint8_t nonce[40];
+//	int r;
+
+//	r = falcon_sign_start(rng, nonce, &hd);
+//	if (r != 0) {
+//		return r;
+//	}
+//	shake256_inject(&hd, data, data_len);
+//	return falcon_sign_dyn_finish(rng, sig, sig_len, sig_type,
+//		privkey, privkey_len, &hd, nonce, tmp, tmp_len);
+//}
+
+///* see falcon.h */
+//int
+//falcon_sign_tree(shake256_context *rng,
+//	void *sig, size_t *sig_len, int sig_type,
+//	const void *expanded_key,
+//	const void *data, size_t data_len,
+//	void *tmp, size_t tmp_len)
+//{
+//	shake256_context hd;
+//	uint8_t nonce[40];
+//	int r;
+
+//	r = falcon_sign_start(rng, nonce, &hd);
+//	if (r != 0) {
+//		return r;
+//	}
+//	shake256_inject(&hd, data, data_len);
+//	return falcon_sign_tree_finish(rng, sig, sig_len, sig_type,
+//		expanded_key, &hd, nonce, tmp, tmp_len);
+//}
+
+#define IMAX_BITS(m) ((m)/((m)%255+1) / 255%255*8 + 7-86/((m)%255+12))
+#define RAND_MAX_WIDTH IMAX_BITS(RAND_MAX)
+_Static_assert((RAND_MAX & (RAND_MAX + 1u)) == 0, "RAND_MAX not a Mersenne number");
+
+uint64_t rand64(void) {
+  uint64_t r = 0;
+  for (int i = 0; i < 64; i += RAND_MAX_WIDTH) {
+    r <<= RAND_MAX_WIDTH;
+    r ^= (unsigned) rand();
+  }
+  return r;
 }
 
-/* see falcon.h */
-int
-falcon_sign_dyn_finish(shake256_context *rng,
-	void *sig, size_t *sig_len, int sig_type,
-	const void *privkey, size_t privkey_len,
-	shake256_context *hash_data, const void *nonce,
-	void *tmp, size_t tmp_len)
-{
-	unsigned logn;
-	const uint8_t *sk;
-	uint8_t *es;
-	int8_t *f, *g, *F, *G;
-	uint16_t *hm;
-	int16_t *sv;
-	uint8_t *atmp;
-	size_t u, v, n, es_len;
-	unsigned oldcw;
-	inner_shake256_context sav_hash_data;
-
-	/*
-	 * Get degree from private key header byte, and check
-	 * parameters.
-	 */
-	if (privkey_len == 0) {
-		return FALCON_ERR_FORMAT;
-	}
-	sk = (uint8_t*)privkey;
-	if ((sk[0] & 0xF0) != 0x50) {
-		return FALCON_ERR_FORMAT;
-	}
-	logn = sk[0] & 0x0F;
-	if (logn < 1 || logn > 10) {
-		return FALCON_ERR_FORMAT;
-	}
-	if (privkey_len != FALCON_PRIVKEY_SIZE(logn)) {
-		return FALCON_ERR_FORMAT;
-	}
-	if (tmp_len < FALCON_TMPSIZE_SIGNDYN(logn)) {
-		return FALCON_ERR_SIZE;
-	}
-	es_len = *sig_len;
-	if (es_len < 41) {
-		return FALCON_ERR_SIZE;
-	}
-	switch (sig_type) {
-	case FALCON_SIG_COMPRESSED:
-		break;
-	case FALCON_SIG_PADDED:
-		if (*sig_len < FALCON_SIG_PADDED_SIZE(logn)) {
-			return FALCON_ERR_SIZE;
-		}
-		break;
-	case FALCON_SIG_CT:
-		if (*sig_len < FALCON_SIG_CT_SIZE(logn)) {
-			return FALCON_ERR_SIZE;
-		}
-		break;
-	default:
-		return FALCON_ERR_BADARG;
-	}
-
-	/*
-	 * Decode private key elements, and complete private key.
-	 */
-	n = (size_t)1 << logn;
-	f = (int8_t *)tmp;
-	g = f + n;
-	F = g + n;
-	G = F + n;
-	hm = (uint16_t *)(G + n);
-	sv = (int16_t *)hm;
-	atmp = align_u64(hm + n);
-	u = 1;
-	v = Zf(trim_i8_decode)(f, logn, Zf(max_fg_bits)[logn],
-		sk + u, privkey_len - u);
-	if (v == 0) {
-		return FALCON_ERR_FORMAT;
-	}
-	u += v;
-	v = Zf(trim_i8_decode)(g, logn, Zf(max_fg_bits)[logn],
-		sk + u, privkey_len - u);
-	if (v == 0) {
-		return FALCON_ERR_FORMAT;
-	}
-	u += v;
-	v = Zf(trim_i8_decode)(F, logn, Zf(max_FG_bits)[logn],
-		sk + u, privkey_len - u);
-	if (v == 0) {
-		return FALCON_ERR_FORMAT;
-	}
-	u += v;
-	if (u != privkey_len) {
-		return FALCON_ERR_FORMAT;
-	}
-	if (!Zf(complete_private)(G, f, g, F, logn, atmp)) {
-		return FALCON_ERR_FORMAT;
-	}
-
-	/*
-	 * Hash message to a point.
-	 */
-	shake256_flip(hash_data);
-	sav_hash_data = *(inner_shake256_context *)hash_data;
-
-	/*
-	 * Compute and encode signature.
-	 */
-	for (;;) {
-		/*
-		 * Hash message to a point. We must redo it when looping
-		 * (in case of a padded signature format and a failed
-		 * attempt due to an oversized compressed signature), because
-		 * we overwrite the hash output with the signature (in order
-		 * to save some RAM).
-		 */
-		*(inner_shake256_context *)hash_data = sav_hash_data;
-		if (sig_type == FALCON_SIG_CT) {
-			Zf(hash_to_point_ct)(
-				(inner_shake256_context *)hash_data,
-				hm, logn, atmp);
-		} else {
-			Zf(hash_to_point_vartime)(
-				(inner_shake256_context *)hash_data,
-				hm, logn);
-		}
-		oldcw = set_fpu_cw(2);
-		Zf(sign_dyn)(sv, (inner_shake256_context *)rng,
-			f, g, F, G, hm, logn, atmp);
-		set_fpu_cw(oldcw);
-		es = (uint8_t*)sig;
-		es_len = *sig_len;
-		memcpy(es + 1, nonce, 40);
-		u = 41;
-		switch (sig_type) {
-			size_t tu;
-
-		case FALCON_SIG_COMPRESSED:
-			es[0] = 0x30 + logn;
-			v = Zf(comp_encode)(es + u, es_len - u, sv, logn);
-			if (v == 0) {
-				return FALCON_ERR_SIZE;
-			}
-			break;
-		case FALCON_SIG_PADDED:
-			es[0] = 0x30 + logn;
-			tu = FALCON_SIG_PADDED_SIZE(logn);
-			v = Zf(comp_encode)(es + u, tu - u, sv, logn);
-			if (v == 0) {
-				/*
-				 * Signature does not fit, loop.
-				 */
-				continue;
-			}
-			if (u + v < tu) {
-				memset(es + u + v, 0, tu - (u + v));
-				v = tu - u;
-			}
-			break;
-		case FALCON_SIG_CT:
-			es[0] = 0x50 + logn;
-			v = Zf(trim_i16_encode)(es + u, es_len - u,
-				sv, logn, Zf(max_sig_bits)[logn]);
-			if (v == 0) {
-				return FALCON_ERR_SIZE;
-			}
-			break;
-		}
-		*sig_len = u + v;
-		return 0;
-	}
+uint32_t rand32(void) {
+  uint64_t r = 0;
+  for (int i = 0; i < 32; i += RAND_MAX_WIDTH) {
+    r <<= RAND_MAX_WIDTH;
+    r ^= (unsigned) rand();
+  }
+  return r;
 }
 
-/* see falcon.h */
-int
-falcon_expand_privkey(void *expanded_key, size_t expanded_key_len,
-	const void *privkey, size_t privkey_len,
-	void *tmp, size_t tmp_len)
-{
-	unsigned logn;
-	const uint8_t *sk;
-	int8_t *f, *g, *F, *G;
-	uint8_t *atmp;
-	size_t u, v, n;
-	fpr *expkey;
-	unsigned oldcw;
-
-	/*
-	 * Get degree from private key header byte, and check
-	 * parameters.
-	 */
-	if (privkey_len == 0) {
-		return FALCON_ERR_FORMAT;
-	}
-	sk = (uint8_t*)privkey;
-	if ((sk[0] & 0xF0) != 0x50) {
-		return FALCON_ERR_FORMAT;
-	}
-	logn = sk[0] & 0x0F;
-	if (logn < 1 || logn > 10) {
-		return FALCON_ERR_FORMAT;
-	}
-	if (privkey_len != FALCON_PRIVKEY_SIZE(logn)) {
-		return FALCON_ERR_FORMAT;
-	}
-	if (expanded_key_len < FALCON_EXPANDEDKEY_SIZE(logn)
-		|| tmp_len < FALCON_TMPSIZE_EXPANDPRIV(logn))
-	{
-		return FALCON_ERR_SIZE;
-	}
-
-	/*
-	 * Decode private key elements, and complete private key.
-	 */
-	n = (size_t)1 << logn;
-	f = (int8_t *)tmp;
-	g = f + n;
-	F = g + n;
-	G = F + n;
-	atmp = align_u64(G + n);
-	u = 1;
-	v = Zf(trim_i8_decode)(f, logn, Zf(max_fg_bits)[logn],
-		sk + u, privkey_len - u);
-	if (v == 0) {
-		return FALCON_ERR_FORMAT;
-	}
-	u += v;
-	v = Zf(trim_i8_decode)(g, logn, Zf(max_fg_bits)[logn],
-		sk + u, privkey_len - u);
-	if (v == 0) {
-		return FALCON_ERR_FORMAT;
-	}
-	u += v;
-	v = Zf(trim_i8_decode)(F, logn, Zf(max_FG_bits)[logn],
-		sk + u, privkey_len - u);
-	if (v == 0) {
-		return FALCON_ERR_FORMAT;
-	}
-	u += v;
-	if (u != privkey_len) {
-		return FALCON_ERR_FORMAT;
-	}
-	if (!Zf(complete_private)(G, f, g, F, logn, atmp)) {
-		return FALCON_ERR_FORMAT;
-	}
-
-	/*
-	 * Expand private key.
-	 */
-	*(uint8_t *)expanded_key = logn;
-	expkey = align_fpr((uint8_t *)expanded_key + 1);
-	oldcw = set_fpu_cw(2);
-	Zf(expand_privkey)(expkey, f, g, F, G, logn, atmp);
-	set_fpu_cw(oldcw);
-	return 0;
-}
-
-/* see falcon.h */
-int
-falcon_sign_tree_finish(shake256_context *rng,
-	void *sig, size_t *sig_len, int sig_type,
-	const void *expanded_key,
-	shake256_context *hash_data, const void *nonce,
-	void *tmp, size_t tmp_len)
-{
-	unsigned logn;
-	uint8_t *es;
-	const fpr *expkey;
-	uint16_t *hm;
-	int16_t *sv;
-	uint8_t *atmp;
-	size_t u, v, n, es_len;
-	unsigned oldcw;
-	inner_shake256_context sav_hash_data;
-
-	/*
-	 * Get degree from private key header byte, and check
-	 * parameters.
-	 */
-	logn = *(const uint8_t *)expanded_key;
-	if (logn < 1 || logn > 10) {
-		return FALCON_ERR_FORMAT;
-	}
-	if (tmp_len < FALCON_TMPSIZE_SIGNTREE(logn)) {
-		return FALCON_ERR_SIZE;
-	}
-	es_len = *sig_len;
-	if (es_len < 41) {
-		return FALCON_ERR_SIZE;
-	}
-	expkey = (const fpr *)align_fpr((uint8_t *)expanded_key + 1);
-	switch (sig_type) {
-	case FALCON_SIG_COMPRESSED:
-		break;
-	case FALCON_SIG_PADDED:
-		if (*sig_len < FALCON_SIG_PADDED_SIZE(logn)) {
-			return FALCON_ERR_SIZE;
-		}
-		break;
-	case FALCON_SIG_CT:
-		if (*sig_len < FALCON_SIG_CT_SIZE(logn)) {
-			return FALCON_ERR_SIZE;
-		}
-		break;
-	default:
-		return FALCON_ERR_BADARG;
-	}
-
-	n = (size_t)1 << logn;
-	hm = (uint16_t *)align_u16(tmp);
-	sv = (int16_t *)hm;
-	atmp = align_u64(sv + n);
-
-	/*
-	 * Hash message to a point.
-	 */
-	shake256_flip(hash_data);
-	sav_hash_data = *(inner_shake256_context *)hash_data;
-
-	/*
-	 * Compute and encode signature.
-	 */
-	for (;;) {
-		/*
-		 * Hash message to a point. We must redo it when looping
-		 * (in case of a padded signature format and a failed
-		 * attempt due to an oversized compressed signature), because
-		 * we overwrite the hash output with the signature (in order
-		 * to save some RAM).
-		 */
-		*(inner_shake256_context *)hash_data = sav_hash_data;
-		if (sig_type == FALCON_SIG_CT) {
-			Zf(hash_to_point_ct)(
-				(inner_shake256_context *)hash_data,
-				hm, logn, atmp);
-		} else {
-			Zf(hash_to_point_vartime)(
-				(inner_shake256_context *)hash_data,
-				hm, logn);
-		}
-		oldcw = set_fpu_cw(2);
-		Zf(sign_tree)(sv, (inner_shake256_context *)rng,
-			expkey, hm, logn, atmp);
-		set_fpu_cw(oldcw);
-		es = (uint8_t*)sig;
-		es_len = *sig_len;
-		memcpy(es + 1, nonce, 40);
-		u = 41;
-		switch (sig_type) {
-			size_t tu;
-
-		case FALCON_SIG_COMPRESSED:
-			es[0] = 0x30 + logn;
-			v = Zf(comp_encode)(es + u, es_len - u, sv, logn);
-			if (v == 0) {
-				return FALCON_ERR_SIZE;
-			}
-			break;
-		case FALCON_SIG_PADDED:
-			es[0] = 0x30 + logn;
-			tu = FALCON_SIG_PADDED_SIZE(logn);
-			v = Zf(comp_encode)(es + u, tu - u, sv, logn);
-			if (v == 0) {
-				/*
-				 * Signature does not fit, loop.
-				 */
-				continue;
-			}
-			if (u + v < tu) {
-				memset(es + u + v, 0, tu - (u + v));
-				v = tu - u;
-			}
-			break;
-		case FALCON_SIG_CT:
-			es[0] = 0x50 + logn;
-			v = Zf(trim_i16_encode)(es + u, es_len - u,
-				sv, logn, Zf(max_sig_bits)[logn]);
-			if (v == 0) {
-				return FALCON_ERR_SIZE;
-			}
-			break;
-		}
-		*sig_len = u + v;
-		return 0;
-	}
-}
-
-/* see falcon.h */
-int
-falcon_sign_dyn(shake256_context *rng,
-	void *sig, size_t *sig_len, int sig_type,
-	const void *privkey, size_t privkey_len,
-	const void *data, size_t data_len,
-	void *tmp, size_t tmp_len)
-{
-	shake256_context hd;
-	uint8_t nonce[40];
-	int r;
-
-	r = falcon_sign_start(rng, nonce, &hd);
-	if (r != 0) {
-		return r;
-	}
-	shake256_inject(&hd, data, data_len);
-	return falcon_sign_dyn_finish(rng, sig, sig_len, sig_type,
-		privkey, privkey_len, &hd, nonce, tmp, tmp_len);
-}
-
-/* see falcon.h */
-int
-falcon_sign_tree(shake256_context *rng,
-	void *sig, size_t *sig_len, int sig_type,
-	const void *expanded_key,
-	const void *data, size_t data_len,
-	void *tmp, size_t tmp_len)
-{
-	shake256_context hd;
-	uint8_t nonce[40];
-	int r;
-
-	r = falcon_sign_start(rng, nonce, &hd);
-	if (r != 0) {
-		return r;
-	}
-	shake256_inject(&hd, data, data_len);
-	return falcon_sign_tree_finish(rng, sig, sig_len, sig_type,
-		expanded_key, &hd, nonce, tmp, tmp_len);
+uint32_t rand16(void) {
+  uint64_t r = 0;
+  for (int i = 0; i < 16; i += RAND_MAX_WIDTH) {
+    r <<= RAND_MAX_WIDTH;
+    r ^= (unsigned) rand();
+  }
+  return r;
 }
 
 int main()
 {
-	#define BENCHMARK_ROUND 100
-	uint64_t start;
-        uint64_t stop;
-       	uint64_t delta;
-       	uint64_t average_clk;
-	int us, average_us, cnt;
+
+		///////////////////////////////////////////////////////
+	// code for taking timing---
+	///////////////////////////////////////////////////////
 	
+	#define BENCHMARK_ROUND 100
+	uint64_t start, stop, delta, delta_old, min, max;
+	int us, cnt;
+	long double average_us, average_clk, avclk_old, var, std_err;
+
+	#define MIN(a,b) (((a)<(b))?(a):(b))
+	#define MAX(a,b) (((a)>(b))?(a):(b))
+
 	#define CALC_RESET {		 \
+		delta       = 0;         \
+		delta_old   = 0;         \
+		var         = 0;         \
 		average_clk = 0;	 \
 		average_us  = 0;	 \
+		delta_old   = 0;         \
+		avclk_old   = 0;         \
+		min         = 9999999999;\
+		max         = 0;         \
 		timer.reset();		 \
 		cnt = 1;		 \
 	}
 	
 	#define CALC_START {		 \
+		wait(0.01);           \
 		timer.reset();		 \
 		timer.start();		 \
 		start = DWT->CYCCNT;	 \
@@ -4856,13 +5096,20 @@ int main()
 	#define CALC_STOP {		 		 \
 		stop         = DWT->CYCCNT;     	 \
 		us           = timer.read_us(); 	 \
-		delta        = stop - start;		 \
-		average_clk += (delta-average_clk)/cnt;	 \
-		average_us  += (us-average_us)/cnt;	 \
+		delta_old    = delta;                    \
+		avclk_old    = average_clk;              \
+		delta        = stop - start;             \
+		average_clk += (long double)(delta-average_clk)/cnt;	 \
+		var         += (long double)((delta-average_clk)*(delta-avclk_old))/cnt; \
+		average_us  += (long double)(us-average_us)/cnt;	 \
+		min          = MIN(delta,min);           \
+		max          = MAX(delta,max);           \
 		cnt         += 1;			 \
+		wait(0.001);                           \
 	}
 	
-	#define CALC_AVG {				\
+	#define CALC_AVG {				 \
+		std_err      = sqrt(var/cnt);            \
 	}
 
 	#define timer_read_ms(x)    chrono::duration_cast<chrono::milliseconds>((x).elapsed_time()).count()
@@ -4872,6 +5119,8 @@ int main()
 	DWT->LAR = 0xC5ACCE55;
 	DWT->CYCCNT = 0;
 	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	///////////////////////////////////////////////////////
+	
 	int ret_val = 0;
 	
 	int i = 3;
@@ -4892,12 +5141,12 @@ int main()
 	shake256_context sc;
 	shake256_init_prng_from_seed(&sc, seed, 16);
 
-	void *pubkey, *pubkey2, *privkey, *sig, *expkey;// *sigct, *expkey;
+	void *pubkey, *privkey, *expkey, *sig, *pubkey2, *sigct;
 	size_t pubkey_len, privkey_len, sig_len, expkey_len;
 	shake256_context rng;
-	shake256_context hd;
-	uint8_t nonce[40];
-	void *tmpsd, *tmpkg, *tmpmp, *tmpvv, *tmpek, *tmpst;
+	//shake256_context hd;
+	//uint8_t nonce[40];
+	void *tmpkg, *tmpsd, *tmpmp, *tmpvv, *tmpek, *tmpst;
 	size_t tmpkg_len, tmpvv_len, tmpmp_len, tmpsd_len, tmpek_len, tmpst_len;
 	
 	fflush(stdout);
@@ -4926,7 +5175,7 @@ int main()
 	tmpmp 	    = xmalloc(tmpmp_len);
 	tmpvv       = xmalloc(tmpvv_len);
 	tmpek       = xmalloc(tmpek_len);
-	tmpst       = xmalloc(tmpst_len);
+	//tmpst       = xmalloc(tmpst_len);
 
 	pc.printf("-------------------\n\r");
 	pc.printf("| Starting Falcon |\n\r");
@@ -4936,20 +5185,20 @@ int main()
 	pc.printf("| Doing Key Generation |\n\r");
 	pc.printf("------------------------\n\r");
 
-	CALC_RESET
-	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
-		memset(privkey, 0, privkey_len);
-		memset(pubkey, 0, pubkey_len);
-		CALC_START
-		ret_val = falcon_keygen_make(&rng, logn, privkey, privkey_len,
-				pubkey, pubkey_len, tmpkg, tmpkg_len);
-		CALC_STOP
-	}
-	CALC_AVG
-		
-	pc.printf("Key Generation clock cycles taken: %lld\n\r", delta);
-        pc.printf("Key Generation time taken in microsecs: %d\n\r", us);
-        pc.printf("Key Generation failed if nonzero: %d\n\r", ret_val);
+	//CALC_RESET
+	//for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+	memset(privkey, 0, privkey_len);
+	memset(pubkey, 0, pubkey_len);
+		//CALC_START
+	ret_val = falcon_keygen_make(&rng, logn, privkey, privkey_len,
+		pubkey, pubkey_len, tmpkg, tmpkg_len);
+		//CALC_STOP
+	//}
+	//CALC_AVG
+
+//	pc.printf("Key Generation clock cycles taken: %lld\n\r", delta);
+//        pc.printf("Key Generation time taken in microsecs: %d\n\r", us);
+//        pc.printf("Key Generation failed if nonzero: %d\n\r", ret_val);
         
 //	memset(pubkey2, 0xFF, pubkey_len);
 //	ret_val = falcon_make_public(pubkey2, pubkey_len,
@@ -5142,5 +5391,865 @@ int main()
 	
 	fflush(stdout);
 	*/
-			
+	
+	#define MUL31(x, y)   ((uint64_t)((x) | (uint32_t)0x80000000) \
+		               * (uint64_t)((y) | (uint32_t)0x80000000) \
+		               - ((uint64_t)(x) << 31) - ((uint64_t)(y) << 31) \
+		               - ((uint64_t)1 << 62))
+		               
+	#define MUL15(x, y)   ((uint32_t)((x) | (uint32_t)0x80000000) \
+		               * (uint32_t)((y) | (uint32_t)0x80000000) \
+		               & (uint32_t)0x3FFFFFFF)
+	
+	#define rounds        5000
+	
+	fflush(stdout);
+	wait(1);
+
+	pc.printf("-------------------------\n\r");
+	pc.printf("Testing multiplication---\n\r");
+	pc.printf("-------------------------\n\r");
+	
+	/// function for 32->32 mult
+	pc.printf("-------------------\n\r");
+	pc.printf("32->32 mult--------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32();
+//		uint32_t r2  = rand32();
+		uint32_t res = 0;
+		CALC_START
+		res = (uint32_t)r1*r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for 32->64 mult
+	pc.printf("-------------------\n\r");
+	pc.printf("32->64 mult--------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)r1*r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for MUL31 and MUL15
+	pc.printf("-------------------\n\r");
+	pc.printf("MUL15 mult---------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){
+		uint16_t r1  = rand16() >> 1;
+		uint16_t r2  = 0;
+		if (r % 16 == 0) continue; else (r2 = rand16() >> 1);
+		uint32_t res = 0;
+		CALC_START
+		res = MUL15(r1, r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+	
+	fflush(stdout);
+	wait(1);
+		
+	pc.printf("-------------------\n\r");
+	pc.printf("MUL31 mult---------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32() >> 1;
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32() >> 1;
+		uint64_t res = 0;
+		CALC_START
+		res = MUL31(r1, r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+	
+	fflush(stdout);
+	wait(1);
+
+	/// function for 64->64 mult
+	pc.printf("-------------------\n\r");
+	pc.printf("64->64 mult--------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint64_t r1  = rand64();
+		uint64_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand64();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)r1*r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+//////////////////////////////////////////////////////////////////////////////////////////
+
+	/// function for 32->32 mult
+	pc.printf("-------------------\n\r");
+	pc.printf("float->float mult--\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		float r1  = (float)(rand64()/rand16());
+		float r2  = 0;
+		if (r % 16 == 0) continue; else r2 = (float)(rand64()/rand16());
+		CALC_START
+		float res = r1*r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for 32->64 mult
+	pc.printf("-------------------\n\r");
+	pc.printf("float->double mult.\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		float r1  = (float)(rand64()/rand16());
+		float r2  = 0;
+		if (r % 16 == 0) continue; else r2 = (float)(rand64()/rand16());
+		CALC_START
+		double res = (double)r1*r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for 64->64 mult
+	pc.printf("-------------------\n\r");
+	pc.printf("double->double mult\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		double r1  = (double)(rand64()/rand16());
+		double r2  = 0;
+		if (r % 16 == 0) continue; else r2 = (double)(rand64()/rand16());
+		CALC_START
+		double res = r1*r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+//////////////////////////////////////////////////////////////////////////////////////////
+	pc.printf("-------------------------\n\r");
+	pc.printf("Testing Division---------\n\r");
+	pc.printf("-------------------------\n\r");
+	// casting to uints, rather than floats as I think this
+	// might be more of the point of Pornin in BearSSL:
+	// https://www.bearssl.org/ctmul.html	
+	
+	/// function for 32->32 div
+	pc.printf("-------------------\n\r");
+	pc.printf("32->32 div---------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32();
+		uint32_t res = 0;
+		CALC_START
+		res = (uint32_t)r1/r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for 32->64 div
+	pc.printf("-------------------\n\r");
+	pc.printf("32->64 div---------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)r1/r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for 64->64 div
+	pc.printf("-------------------\n\r");
+	pc.printf("64->64 div---------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint64_t r1  = rand64();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand64();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)r1/r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+////////////////////////////////////////////////////////////////////////
+	pc.printf("-------------------------\n\r");
+	pc.printf("Testing L/R shifts-------\n\r");
+	pc.printf("-------------------------\n\r");
+	// casting to uints, rather than floats as I think this
+	// might be more of the point of Pornin in BearSSL:
+	// https://www.bearssl.org/ctmul.html	
+	
+	/// function for 32->32 rshift
+	pc.printf("-------------------\n\r");
+	pc.printf("32->32 lshift------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32();
+		uint32_t res = 0;
+		CALC_START
+		res = (uint32_t)r1 << r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for 32->32 lshift
+	pc.printf("-------------------\n\r");
+	pc.printf("32->32 rshift------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32();
+		uint32_t res = 0;
+		CALC_START
+		res = (uint32_t)r1 >> r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for 32->64 lshift
+	pc.printf("-------------------\n\r");
+	pc.printf("32->64 lshift------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)r1 << r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for 32->64 rshift
+	pc.printf("-------------------\n\r");
+	pc.printf("32->64 rshift------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand32();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)r1 >> r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for 64->64 lshift
+	pc.printf("-------------------\n\r");
+	pc.printf("64->64 lshift------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint64_t r1  = rand64();
+		uint64_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand64();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)r1 << r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for 64->64 rshift
+	pc.printf("-------------------\n\r");
+	pc.printf("64->64 rshift------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint64_t r1  = rand64();
+		uint64_t r2  = 0;
+		if (r % 16 == 0) continue; else r2 = rand64();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)r1 >> r2;
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	pc.printf("-------------------------\n\r");
+	pc.printf("Testing Sqrt-------------\n\r");
+	pc.printf("-------------------------\n\r");
+	// casting to uints, rather than floats as I think this
+	// might be more of the point of Pornin in BearSSL:
+	// https://www.bearssl.org/ctmul.html	
+	
+	/// function for 32->32 sqrt
+	pc.printf("-------------------\n\r");
+	pc.printf("32->32 sqrt--------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint32_t res = 0;
+		CALC_START
+		res = (uint32_t)sqrt(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for 32->64 dqrt
+	pc.printf("-------------------\n\r");
+	pc.printf("32->64 sqrt--------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint32_t r1  = rand32();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)sqrt(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for 64->64 sqrt
+	pc.printf("-------------------\n\r");
+	pc.printf("64->64 sqrt--------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint64_t r1  = rand64();
+		uint64_t res = 0;
+		CALC_START
+		res = (uint64_t)sqrt(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+//////////////////////////////////////////////////////////////////////////
+	/// function for fpr add
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr add------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		fpr r2  = fpr_zero;
+		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_add(r1,r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for fpr sub
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr sub------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		fpr r2  = fpr_zero;
+		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_sub(r1,r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr floor
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr floor----------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		int64_t res = fpr_floor(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr mul
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr mul------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		fpr r2  = fpr_zero;
+		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_mul(r1,r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for fpr sqr
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr sqr------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_sqr(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr inv
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr inv------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_inv(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for fpr div
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr div------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		fpr r2  = fpr_zero;
+		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_div(r1,r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr ursh
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr ursh-----------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint64_t r1  = rand64();
+		int r2  = rand16() >> 10;
+		CALC_START
+		uint64_t res = fpr_ursh(r1,r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for fpr irsh
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr irsh-----------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		int64_t r1  = rand64();
+		int r2  = rand16() >> 10;
+		CALC_START
+		int64_t res = fpr_ursh(r1,r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr ulsh
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr ulsh-----------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint64_t r1  = rand64();
+		int r2  = rand16() >> 10;
+		CALC_START
+		uint64_t res = fpr_ursh(r1,r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr of
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr of-------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		uint64_t r1  = rand64();
+		CALC_START
+		fpr res = fpr_of(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	/// function for fpr rint
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr rint-----------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		int64_t res = fpr_rint(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr trunc
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr trunc----------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		int64_t res = fpr_trunc(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr neg
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr neg------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_neg(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr half
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr half-----------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_half(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr double
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr double---------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_double(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr lt
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr lt-------------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		fpr r2  = fpr_zero;
+		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
+		CALC_START
+		int res = fpr_lt(r1,r2);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+
+	pc.printf("Testing finished");		
 }
+
+
+
+
+
+
+
+
+
+
+
+
