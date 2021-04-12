@@ -1,0 +1,274 @@
+-------------------------
+Testing multiplication---
+-------------------------
+-------------------
+32->32 mult--------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->64 mult--------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+MUL15 mult---------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+MUL31 mult---------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+64->64 mult--------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+float->float mult--
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+float->double mult.
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+double->double mult
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------------
+Testing Division---------
+-------------------------
+-------------------
+32->32 div---------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->64 div---------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+64->64 div---------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------------
+Testing L/R shifts-------
+-------------------------
+-------------------
+32->32 lshift------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->32 rshift------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->64 lshift------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+32->64 rshift------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+64->64 lshift------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+64->64 rshift------
+Avg clock cycles:        2
+Min clock cycles:        1
+Max clock cycles:        14
+Std dev of clock cycles: 12.6
+Std err of clock cycles: 0.2
+-------------------------
+Testing Sqrt-------------
+-------------------------
+-------------------
+32->32 sqrt--------
+Avg clock cycles:        18
+Min clock cycles:        16
+Max clock cycles:        38
+Std dev of clock cycles: 13.5
+Std err of clock cycles: 0.2
+-------------------
+32->64 sqrt--------
+Avg clock cycles:        15
+Min clock cycles:        15
+Max clock cycles:        16
+Std dev of clock cycles: 0.3
+Std err of clock cycles: 0.0
+-------------------
+64->64 sqrt--------
+Avg clock cycles:        71
+Min clock cycles:        51
+Max clock cycles:        113
+Std dev of clock cycles: 25.5
+Std err of clock cycles: 0.4
+-------------------
+fpr add------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr sub------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr floor----------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr mul------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr sqr------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr inv------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr div------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr ursh-----------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr irsh-----------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr ulsh-----------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr of-------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr rint-----------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        13
+Std dev of clock cycles: 7.2
+Std err of clock cycles: 0.1
+-------------------
+fpr trunc----------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr neg------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr half-----------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr double---------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+-------------------
+fpr lt-------------
+Avg clock cycles:        1
+Min clock cycles:        1
+Max clock cycles:        1
+Std dev of clock cycles: 0.0
+Std err of clock cycles: 0.0
+Testing finished
+
+
