@@ -32,27 +32,27 @@ Serial pc(SERIAL_TX, SERIAL_RX, 115200);
 DigitalOut myled(LED1);
 Timer timer;
 
-static void
-check_eq(const void *a, const void *b, size_t len, const char *banner)
-{
-	size_t u;
+//static void
+//check_eq(const void *a, const void *b, size_t len, const char *banner)
+//{
+//	size_t u;
 
-	if (memcmp(a, b, len) == 0) {
-		return;
-	}
-	fprintf(stderr, "%s: wrong value:\n", banner);
-	fprintf(stderr, "a: ");
-	for (u = 0; u < len; u ++) {
-		fprintf(stderr, "%02x", ((const unsigned char *)a)[u]);
-	}
-	fprintf(stderr, "\n");
-	fprintf(stderr, "b: ");
-	for (u = 0; u < len; u ++) {
-		fprintf(stderr, "%02x", ((const unsigned char *)b)[u]);
-	}
-	fprintf(stderr, "\n");
-	exit(EXIT_FAILURE);
-}
+//	if (memcmp(a, b, len) == 0) {
+//		return;
+//	}
+//	fprintf(stderr, "%s: wrong value:\n", banner);
+//	fprintf(stderr, "a: ");
+//	for (u = 0; u < len; u ++) {
+//		fprintf(stderr, "%02x", ((const unsigned char *)a)[u]);
+//	}
+//	fprintf(stderr, "\n");
+//	fprintf(stderr, "b: ");
+//	for (u = 0; u < len; u ++) {
+//		fprintf(stderr, "%02x", ((const unsigned char *)b)[u]);
+//	}
+//	fprintf(stderr, "\n");
+//	exit(EXIT_FAILURE);
+//}
 
 static void *
 xmalloc(size_t len)
@@ -115,8 +115,8 @@ int main()
 	
 	#define CALC_AVG {				\
 	}
-	//		delta = average_clk / BENCHMARK_ROUND;  \
-	//		us    = average_us  / BENCHMARK_ROUND;  \
+	//		delta = average_clk / BENCHMARK_ROUND; 
+	//		us    = average_us  / BENCHMARK_ROUND; 
 
 	#define timer_read_ms(x)    chrono::duration_cast<chrono::milliseconds>((x).elapsed_time()).count()
 
@@ -140,8 +140,8 @@ int main()
 	* ret_val outputs 0 if functions work as expected.
 	* comment code out below to switch between Falcon and Dilithium.
 	*/
-	/*
-	unsigned logn = 10; // set to 9 for 512 parameters, 10 for 1024
+
+	unsigned logn = 9; // set to 9 for 512 parameters, 10 for 1024
 	char seed[16] = {0};
 	shake256_context sc;
 	shake256_init_prng_from_seed(&sc, seed, 16);
@@ -209,7 +209,7 @@ int main()
 	ret_val = falcon_make_public(pubkey2, pubkey_len,
 			privkey, privkey_len, tmpmp, tmpmp_len);
         pc.printf("Make Public failed if nonzero: %d\n\r", ret_val);
-	check_eq(pubkey, pubkey2, pubkey_len, "pub / repub");
+	//check_eq(pubkey, pubkey2, pubkey_len, "pub / repub");
 		
 	pc.printf("-----------------------\n\r");
 	pc.printf("| Doing Signing (dyn) |\n\r");
@@ -302,7 +302,6 @@ int main()
 	pc.printf("| Falcon Finished |\n\r");
         pc.printf("-------------------\n\r");	
 	fflush(stdout);
-	*/
 	
 	/*
  	* Dilithium Round 3 code using pqm4 as it's faster than pqclean.
@@ -310,7 +309,7 @@ int main()
 	* ret_val outputs 0 if functions work as expected.
 	* comment code out below to switch between Falcon and Dilithium.
 	*/
-
+	/*
 	#define MLEN 59
 	size_t mlen, smlen;
 	uint8_t pk[CRYPTO_PUBLICKEYBYTES] = {0};
@@ -395,5 +394,5 @@ int main()
 	pc.printf("----------------------\n\r");
 	
 	fflush(stdout);
-			
+	*/		
 }
