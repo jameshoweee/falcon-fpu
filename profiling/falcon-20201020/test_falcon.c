@@ -3637,7 +3637,7 @@ test_sign_self(const int8_t *f, const int8_t *g,
 	inner_shake256_init(&rng);
 	inner_shake256_inject(&rng, (uint8_t *)buf, strlen(buf));
 	inner_shake256_flip(&rng);
-	for (i = 0; i < 100; i ++) {
+	for (i = 0; i < 1; i ++) {
 		uint8_t msg[50];  /* nonce + plain */
 		inner_shake256_context sc, sc2;
 		size_t u;
@@ -3711,12 +3711,12 @@ test_sign(void)
 	tlen = 178176;
 	tmp = xmalloc(tlen);
 
-	test_sign_self(ntru_f_16, ntru_g_16, ntru_F_16, ntru_G_16,
-		ntru_h_16, 4, tmp);
+	//test_sign_self(ntru_f_16, ntru_g_16, ntru_F_16, ntru_G_16,
+	//	ntru_h_16, 4, tmp);
 	test_sign_self(ntru_f_512, ntru_g_512, ntru_F_512, ntru_G_512,
 		ntru_h_512, 9, tmp);
-	test_sign_self(ntru_f_1024, ntru_g_1024, ntru_F_1024, ntru_G_1024,
-		ntru_h_1024, 10, tmp);
+	//test_sign_self(ntru_f_1024, ntru_g_1024, ntru_F_1024, ntru_G_1024,
+	//	ntru_h_1024, 10, tmp);
 
 	xfree(tmp);
 
@@ -3804,7 +3804,7 @@ test_keygen(void)
 	fflush(stdout);
 	tlen = 90112;
 	tmp = xmalloc(tlen);
-	for (logn = 1; logn <= 10; logn ++) {
+	for (logn = 9; logn <= 9; logn ++) {
 		test_keygen_inner(logn, tmp);
 	}
 	xfree(tmp);
@@ -3854,7 +3854,7 @@ test_external_API_inner(unsigned logn, shake256_context *rng)
 	tmpvv = xmalloc(tmpvv_len);
 	tmpek = xmalloc(tmpek_len);
 
-	for (i = 0; i < 12; i ++) {
+	for (i = 0; i < 1; i ++) {
 		int r;
 
 		memset(privkey, 0, privkey_len);
@@ -3865,199 +3865,199 @@ test_external_API_inner(unsigned logn, shake256_context *rng)
 			fprintf(stderr, "keygen failed: %d\n", r);
 			exit(EXIT_FAILURE);
 		}
-		memset(pubkey2, 0xFF, pubkey_len);
-		r = falcon_make_public(pubkey2, pubkey_len,
-			privkey, privkey_len, tmpmp, tmpmp_len);
-		if (r != 0) {
-			fprintf(stderr, "makepub failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		check_eq(pubkey, pubkey2, pubkey_len, "pub / repub");
+/*		memset(pubkey2, 0xFF, pubkey_len);*/
+/*		r = falcon_make_public(pubkey2, pubkey_len,*/
+/*			privkey, privkey_len, tmpmp, tmpmp_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "makepub failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		check_eq(pubkey, pubkey2, pubkey_len, "pub / repub");*/
 
-		r = falcon_get_logn(pubkey, pubkey_len);
-		if (r != (int)logn) {
-			fprintf(stderr, "get_logn failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
+/*		r = falcon_get_logn(pubkey, pubkey_len);*/
+/*		if (r != (int)logn) {*/
+/*			fprintf(stderr, "get_logn failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
 
-		sig_len = FALCON_SIG_COMPRESSED_MAXSIZE(logn);
-		memset(sig, 0, sig_len);
-		r = falcon_sign_dyn(rng, sig, &sig_len, FALCON_SIG_COMPRESSED,
-			privkey, privkey_len,
-			"data1", 5, tmpsd, tmpsd_len);
-		if (r != 0) {
-			fprintf(stderr, "sign_dyn failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		r = falcon_verify(sig, sig_len, FALCON_SIG_COMPRESSED,
-			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);
-		if (r != 0) {
-			fprintf(stderr, "verify failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		if (logn >= 5) {
-			/*
-			 * At very low degrees, it may happen that the
-			 * alternate data hashes to a point which is close
-			 * enough to the correct one that the signature
-			 * matches both. Thus, we skip that check for very
-			 * low degrees.
-			 */
-			r = falcon_verify(sig, sig_len, FALCON_SIG_COMPRESSED,
-				pubkey, pubkey_len, "data2", 5,
-				tmpvv, tmpvv_len);
-			if (r != FALCON_ERR_BADSIG) {
-				fprintf(stderr, "wrong verify err: %d\n", r);
-				exit(EXIT_FAILURE);
-			}
-		}
+/*		sig_len = FALCON_SIG_COMPRESSED_MAXSIZE(logn);*/
+/*		memset(sig, 0, sig_len);*/
+/*		r = falcon_sign_dyn(rng, sig, &sig_len, FALCON_SIG_COMPRESSED,*/
+/*			privkey, privkey_len,*/
+/*			"data1", 5, tmpsd, tmpsd_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "sign_dyn failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		r = falcon_verify(sig, sig_len, FALCON_SIG_COMPRESSED,*/
+/*			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "verify failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		if (logn >= 5) {*/
+/*			/*
+/*			 * At very low degrees, it may happen that the*/
+/*			 * alternate data hashes to a point which is close*/
+/*			 * enough to the correct one that the signature*/
+/*			 * matches both. Thus, we skip that check for very*/
+/*			 * low degrees.*/
+/*			 */
+/*			r = falcon_verify(sig, sig_len, FALCON_SIG_COMPRESSED,*/
+/*				pubkey, pubkey_len, "data2", 5,*/
+/*				tmpvv, tmpvv_len);*/
+/*			if (r != FALCON_ERR_BADSIG) {*/
+/*				fprintf(stderr, "wrong verify err: %d\n", r);*/
+/*				exit(EXIT_FAILURE);*/
+/*			}*/
+/*		}*/
 
-		sigpad_len = FALCON_SIG_PADDED_SIZE(logn);
-		memset(sigpad, 0, sigpad_len);
-		r = falcon_sign_dyn(rng, sigpad, &sigpad_len, FALCON_SIG_PADDED,
-			privkey, privkey_len,
-			"data1", 5, tmpsd, tmpsd_len);
-		if (r != 0) {
-			fprintf(stderr, "sign_dyn(padded) failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		if (sigpad_len != FALCON_SIG_PADDED_SIZE(logn)) {
-			fprintf(stderr, "sign_dyn(padded): wrong length %lu\n",
-				(unsigned long)sigpad_len);
-			exit(EXIT_FAILURE);
-		}
-		r = falcon_verify(sigpad, sigpad_len, FALCON_SIG_PADDED,
-			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);
-		if (r != 0) {
-			fprintf(stderr, "verify(padded) failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		if (logn >= 5) {
-			r = falcon_verify(sigpad, sigpad_len, FALCON_SIG_PADDED,
-				pubkey, pubkey_len, "data2", 5,
-				tmpvv, tmpvv_len);
-			if (r != FALCON_ERR_BADSIG) {
-				fprintf(stderr,
-					"wrong verify(padded) err: %d\n", r);
-				exit(EXIT_FAILURE);
-			}
-		}
+/*		sigpad_len = FALCON_SIG_PADDED_SIZE(logn);*/
+/*		memset(sigpad, 0, sigpad_len);*/
+/*		r = falcon_sign_dyn(rng, sigpad, &sigpad_len, FALCON_SIG_PADDED,*/
+/*			privkey, privkey_len,*/
+/*			"data1", 5, tmpsd, tmpsd_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "sign_dyn(padded) failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		if (sigpad_len != FALCON_SIG_PADDED_SIZE(logn)) {*/
+/*			fprintf(stderr, "sign_dyn(padded): wrong length %lu\n",*/
+/*				(unsigned long)sigpad_len);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		r = falcon_verify(sigpad, sigpad_len, FALCON_SIG_PADDED,*/
+/*			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "verify(padded) failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		if (logn >= 5) {*/
+/*			r = falcon_verify(sigpad, sigpad_len, FALCON_SIG_PADDED,*/
+/*				pubkey, pubkey_len, "data2", 5,*/
+/*				tmpvv, tmpvv_len);*/
+/*			if (r != FALCON_ERR_BADSIG) {*/
+/*				fprintf(stderr,*/
+/*					"wrong verify(padded) err: %d\n", r);*/
+/*				exit(EXIT_FAILURE);*/
+/*			}*/
+/*		}*/
 
-		sigct_len = FALCON_SIG_CT_SIZE(logn);
-		memset(sigct, 0, sigct_len);
-		r = falcon_sign_dyn(rng, sigct, &sigct_len, FALCON_SIG_CT,
-			privkey, privkey_len,
-			"data1", 5, tmpsd, tmpsd_len);
-		if (r != 0) {
-			fprintf(stderr, "sign_dyn(ct) failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		if (sigct_len != FALCON_SIG_CT_SIZE(logn)) {
-			fprintf(stderr, "sign_dyn(ct): wrong length %lu\n",
-				(unsigned long)sigct_len);
-			exit(EXIT_FAILURE);
-		}
-		r = falcon_verify(sigct, sigct_len, FALCON_SIG_CT,
-			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);
-		if (r != 0) {
-			fprintf(stderr, "verify(ct) failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		if (logn >= 5) {
-			r = falcon_verify(sigct, sigct_len, FALCON_SIG_CT,
-				pubkey, pubkey_len, "data2", 5,
-				tmpvv, tmpvv_len);
-			if (r != FALCON_ERR_BADSIG) {
-				fprintf(stderr,
-					"wrong verify(ct) err: %d\n", r);
-				exit(EXIT_FAILURE);
-			}
-		}
+/*		sigct_len = FALCON_SIG_CT_SIZE(logn);*/
+/*		memset(sigct, 0, sigct_len);*/
+/*		r = falcon_sign_dyn(rng, sigct, &sigct_len, FALCON_SIG_CT,*/
+/*			privkey, privkey_len,*/
+/*			"data1", 5, tmpsd, tmpsd_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "sign_dyn(ct) failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		if (sigct_len != FALCON_SIG_CT_SIZE(logn)) {*/
+/*			fprintf(stderr, "sign_dyn(ct): wrong length %lu\n",*/
+/*				(unsigned long)sigct_len);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		r = falcon_verify(sigct, sigct_len, FALCON_SIG_CT,*/
+/*			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "verify(ct) failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		if (logn >= 5) {*/
+/*			r = falcon_verify(sigct, sigct_len, FALCON_SIG_CT,*/
+/*				pubkey, pubkey_len, "data2", 5,*/
+/*				tmpvv, tmpvv_len);*/
+/*			if (r != FALCON_ERR_BADSIG) {*/
+/*				fprintf(stderr,*/
+/*					"wrong verify(ct) err: %d\n", r);*/
+/*				exit(EXIT_FAILURE);*/
+/*			}*/
+/*		}*/
 
-		r = falcon_expand_privkey(expkey, expkey_len,
-			privkey, privkey_len, tmpek, tmpek_len);
-		if (r != 0) {
-			fprintf(stderr, "expand_privkey failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
+/*		r = falcon_expand_privkey(expkey, expkey_len,*/
+/*			privkey, privkey_len, tmpek, tmpek_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "expand_privkey failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
 
-		sig_len = FALCON_SIG_COMPRESSED_MAXSIZE(logn);
-		memset(sig, 0, sig_len);
-		r = falcon_sign_tree(rng, sig, &sig_len, FALCON_SIG_COMPRESSED,
-			expkey,
-			"data1", 5, tmpst, tmpst_len);
-		if (r != 0) {
-			fprintf(stderr, "sign_tree failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		r = falcon_verify(sig, sig_len, FALCON_SIG_COMPRESSED,
-			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);
-		if (r != 0) {
-			fprintf(stderr, "verify2 failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		if (logn >= 5) {
-			r = falcon_verify(sig, sig_len, FALCON_SIG_COMPRESSED,
-				pubkey, pubkey_len, "data2", 5,
-				tmpvv, tmpvv_len);
-			if (r != FALCON_ERR_BADSIG) {
-				fprintf(stderr, "wrong verify2 err: %d\n", r);
-				exit(EXIT_FAILURE);
-			}
-		}
+/*		sig_len = FALCON_SIG_COMPRESSED_MAXSIZE(logn);*/
+/*		memset(sig, 0, sig_len);*/
+/*		r = falcon_sign_tree(rng, sig, &sig_len, FALCON_SIG_COMPRESSED,*/
+/*			expkey,*/
+/*			"data1", 5, tmpst, tmpst_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "sign_tree failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		r = falcon_verify(sig, sig_len, FALCON_SIG_COMPRESSED,*/
+/*			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "verify2 failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		if (logn >= 5) {*/
+/*			r = falcon_verify(sig, sig_len, FALCON_SIG_COMPRESSED,*/
+/*				pubkey, pubkey_len, "data2", 5,*/
+/*				tmpvv, tmpvv_len);*/
+/*			if (r != FALCON_ERR_BADSIG) {*/
+/*				fprintf(stderr, "wrong verify2 err: %d\n", r);*/
+/*				exit(EXIT_FAILURE);*/
+/*			}*/
+/*		}*/
 
-		sigpad_len = FALCON_SIG_PADDED_SIZE(logn);
-		memset(sigpad, 0, sigpad_len);
-		r = falcon_sign_tree(rng, sigpad, &sigpad_len,
-			FALCON_SIG_PADDED,
-			expkey,
-			"data1", 5, tmpst, tmpst_len);
-		if (r != 0) {
-			fprintf(stderr, "sign_tree(padded) failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		r = falcon_verify(sigpad, sigpad_len, FALCON_SIG_PADDED,
-			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);
-		if (r != 0) {
-			fprintf(stderr, "verify2(padded) failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		if (logn >= 5) {
-			r = falcon_verify(sigpad, sigpad_len, FALCON_SIG_PADDED,
-				pubkey, pubkey_len, "data2", 5,
-				tmpvv, tmpvv_len);
-			if (r != FALCON_ERR_BADSIG) {
-				fprintf(stderr,
-					"wrong verify2(padded) err: %d\n", r);
-				exit(EXIT_FAILURE);
-			}
-		}
+/*		sigpad_len = FALCON_SIG_PADDED_SIZE(logn);*/
+/*		memset(sigpad, 0, sigpad_len);*/
+/*		r = falcon_sign_tree(rng, sigpad, &sigpad_len,*/
+/*			FALCON_SIG_PADDED,*/
+/*			expkey,*/
+/*			"data1", 5, tmpst, tmpst_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "sign_tree(padded) failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		r = falcon_verify(sigpad, sigpad_len, FALCON_SIG_PADDED,*/
+/*			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "verify2(padded) failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		if (logn >= 5) {*/
+/*			r = falcon_verify(sigpad, sigpad_len, FALCON_SIG_PADDED,*/
+/*				pubkey, pubkey_len, "data2", 5,*/
+/*				tmpvv, tmpvv_len);*/
+/*			if (r != FALCON_ERR_BADSIG) {*/
+/*				fprintf(stderr,*/
+/*					"wrong verify2(padded) err: %d\n", r);*/
+/*				exit(EXIT_FAILURE);*/
+/*			}*/
+/*		}*/
 
-		sigct_len = FALCON_SIG_CT_SIZE(logn);
-		memset(sigct, 0, sigct_len);
-		r = falcon_sign_tree(rng, sigct, &sigct_len, FALCON_SIG_CT,
-			expkey,
-			"data1", 5, tmpst, tmpst_len);
-		if (r != 0) {
-			fprintf(stderr, "sign_tree(ct) failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		r = falcon_verify(sigct, sigct_len, FALCON_SIG_CT,
-			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);
-		if (r != 0) {
-			fprintf(stderr, "verify2(ct) failed: %d\n", r);
-			exit(EXIT_FAILURE);
-		}
-		if (logn >= 5) {
-			r = falcon_verify(sigct, sigct_len, FALCON_SIG_CT,
-				pubkey, pubkey_len, "data2", 5,
-				tmpvv, tmpvv_len);
-			if (r != FALCON_ERR_BADSIG) {
-				fprintf(stderr,
-					"wrong verify2(ct) err: %d\n", r);
-				exit(EXIT_FAILURE);
-			}
-		}
+/*		sigct_len = FALCON_SIG_CT_SIZE(logn);*/
+/*		memset(sigct, 0, sigct_len);*/
+/*		r = falcon_sign_tree(rng, sigct, &sigct_len, FALCON_SIG_CT,*/
+/*			expkey,*/
+/*			"data1", 5, tmpst, tmpst_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "sign_tree(ct) failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		r = falcon_verify(sigct, sigct_len, FALCON_SIG_CT,*/
+/*			pubkey, pubkey_len, "data1", 5, tmpvv, tmpvv_len);*/
+/*		if (r != 0) {*/
+/*			fprintf(stderr, "verify2(ct) failed: %d\n", r);*/
+/*			exit(EXIT_FAILURE);*/
+/*		}*/
+/*		if (logn >= 5) {*/
+/*			r = falcon_verify(sigct, sigct_len, FALCON_SIG_CT,*/
+/*				pubkey, pubkey_len, "data2", 5,*/
+/*				tmpvv, tmpvv_len);*/
+/*			if (r != FALCON_ERR_BADSIG) {*/
+/*				fprintf(stderr,*/
+/*					"wrong verify2(ct) err: %d\n", r);*/
+/*				exit(EXIT_FAILURE);*/
+/*			}*/
+/*		}*/
 
 		printf(".");
 		fflush(stdout);
@@ -4088,7 +4088,7 @@ test_external_API(void)
 	fflush(stdout);
 
 	shake256_init_prng_from_seed(&rng, "external", 8);
-	for (logn = 1; logn <= 10; logn ++) {
+	for (logn = 9; logn <= 9; logn ++) {
 		test_external_API_inner(logn, &rng);
 	}
 
@@ -5013,19 +5013,19 @@ main(void)
 
 	old = set_fpu_cw(2);
 
-	test_SHAKE256();
-	test_codec();
-	test_vrfy();
-	test_RNG();
-	test_FP_block();
-	test_poly();
-	test_gaussian0_sampler();
-	test_sampler();
-	test_sign();
-	test_keygen();
+	//test_SHAKE256();
+	//test_codec();
+	//test_vrfy();
+	//test_RNG();
+	//test_FP_block();
+	//test_poly();
+	//test_gaussian0_sampler();
+	//test_sampler();
+	//test_sign();
+	//test_keygen();
 	test_external_API();
-	test_nist_KAT(9, "a57400cbaee7109358859a56c735a3cf048a9da2");
-	test_nist_KAT(10, "affdeb3aa83bf9a2039fa9c17d65fd3e3b9828e2");
+	//test_nist_KAT(9, "a57400cbaee7109358859a56c735a3cf048a9da2");
+	//test_nist_KAT(10, "affdeb3aa83bf9a2039fa9c17d65fd3e3b9828e2");
 	/* test_speed(); */
 
 	set_fpu_cw(old);

@@ -32,6 +32,8 @@ Timer timer;
 #define MKN(logn)   ((size_t)1 << (logn))
 #define RNG_CONTEXT   inner_shake256_context
 
+
+
 /* ==================================================================== */
 /*
  * Modular arithmetics.
@@ -4215,11 +4217,45 @@ poly_small_mkgauss(RNG_CONTEXT *rng, int8_t *f, unsigned logn)
 	}
 }
 
+///////////////////////////////////////////////////////
+// code for taking timing---
+///////////////////////////////////////////////////////
+
+#define BENCHMARK_ROUND 50
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+
+#define CYCLES_VARS		 \
+	uint64_t start, stop, delta, ms; \
+//	uint64_t scc_ms = SystemCoreClock / 1000; \
+//	uint64_t ofl_ms = 4294967295 / scc_ms;    \
+
+#define CYCLES_START {		 \
+	start = DWT->CYCCNT;	 \
+	ms = timer.read_ms();	\
+}
+
+#define CYCLES_ADD(cc) {			    \
+	stop         = DWT->CYCCNT;     	    \
+	delta        = stop - start;                \
+	cc	    += delta;                       \
+}
+//	ms = timer.read_ms() - ms;		    \
+//	ms -= ((uint64_t) delta) / scc_ms;			\
+//	cc += ((uint64_t) (ms / ofl_ms)) << 32;	\
+
+#define timer_read_ms(x)    chrono::duration_cast<chrono::milliseconds>((x).elapsed_time()).count()
+
+
 /* see falcon.h */
 void
 Zf(keygen)(inner_shake256_context *rng,
 	int8_t *f, int8_t *g, int8_t *F, int8_t *G, uint16_t *h,
-	unsigned logn, uint8_t *tmp)
+	unsigned logn, uint8_t *tmp, 
+	uint64_t *psm, uint64_t *pss, uint64_t *pstf, 
+	uint64_t *fft, uint64_t *pif, uint64_t *paf, uint64_t *pm, 
+	uint64_t *pmaf, uint64_t *ifft, uint64_t *bfa, uint64_t *cpk, uint64_t *sn)
 {
 	/*
 	 * Algorithm is the following:
@@ -4255,68 +4291,6 @@ Zf(keygen)(inner_shake256_context *rng,
 	rc = rng;
 #endif  // yyyKG_CHACHA20-
 
-	///////////////////////////////////////////////////////
-	// code for taking timing---
-	///////////////////////////////////////////////////////
-	
-	#define BENCHMARK_ROUND 100
-	uint64_t start, stop, delta, delta_old, min, max;
-	int us, cnt;
-	long double average_us, average_clk, avclk_old, var, std_err;
-
-	#define MIN(a,b) (((a)<(b))?(a):(b))
-	#define MAX(a,b) (((a)>(b))?(a):(b))
-
-	#define CALC_RESET {		 \
-		delta       = 0;         \
-		delta_old   = 0;         \
-		var         = 0;         \
-		average_clk = 0;	 \
-		average_us  = 0;	 \
-		delta_old   = 0;         \
-		avclk_old   = 0;         \
-		min         = 9999999999;\
-		max         = 0;         \
-		timer.reset();		 \
-		cnt = 1;		 \
-	}
-	
-	#define CALC_START {		 \
-		wait(0.00001);           \
-		timer.reset();		 \
-		timer.start();		 \
-		start = DWT->CYCCNT;	 \
-	}
-	
-	#define CALC_STOP {		 		 \
-		stop         = DWT->CYCCNT;     	 \
-		us           = timer.read_us(); 	 \
-		delta_old    = delta;                    \
-		avclk_old    = average_clk;              \
-		delta        = stop - start;             \
-		average_clk += (long double)(delta-average_clk)/cnt;	 \
-		var         += (long double)((delta-average_clk)*(delta-avclk_old))/cnt; \
-		average_us  += (long double)(us-average_us)/cnt;	 \
-		min          = MIN(delta,min);           \
-		max          = MAX(delta,max);           \
-		cnt         += 1;			 \
-		wait(0.00001);                           \
-	}
-	
-	#define CALC_AVG {				 \
-		std_err      = sqrt(var/cnt);              \
-	}
-
-	#define timer_read_ms(x)    chrono::duration_cast<chrono::milliseconds>((x).elapsed_time()).count()
-
-	//set so that cycle counter can be read from  DWT->CYCCNT
-	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-	DWT->LAR = 0xC5ACCE55;
-	DWT->CYCCNT = 0;
-	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-	///////////////////////////////////////////////////////
-
-
 	/*
 	 * We need to generate f and g randomly, until we find values
 	 * such that the norm of (g,-f), and of the orthogonalized
@@ -4336,7 +4310,14 @@ Zf(keygen)(inner_shake256_context *rng,
 	 * We require that Res(f,phi) and Res(g,phi) are both odd (the
 	 * NTRU equation solver requires it).
 	 */
-	for (;;1) { // changed by james
+	CYCLES_VARS
+	timer.reset();
+	timer.start();
+
+//	uint64_t psm, pss, pstf, fft, pif, paf, pm, pmaf, ifft, bfa, cpk, sn;
+//	psm = pss = pstf = fft = pif = paf = pm = pmaf = ifft = bfa = cpk = sn = 0;
+
+	 for (;;) { 
 		fpr *rt1, *rt2, *rt3;
 		fpr bnorm;
 		uint32_t normf, normg, norm;
@@ -4348,8 +4329,13 @@ Zf(keygen)(inner_shake256_context *rng,
 		 * (i.e. the resultant of the polynomial with phi
 		 * will be odd).
 		 */
-		poly_small_mkgauss(rc, f, logn); // not constant time
-		poly_small_mkgauss(rc, g, logn); // not constant time
+
+		uint64_t psm_prev = *psm;
+		
+		CYCLES_START
+		poly_small_mkgauss(rc, f, logn);
+		poly_small_mkgauss(rc, g, logn);
+		CYCLES_ADD(*psm)		
 
 		/*
 		 * Verify that all coefficients are within the bounds
@@ -4372,7 +4358,7 @@ Zf(keygen)(inner_shake256_context *rng,
 		}
 		if (lim < 0) {
 			continue;
-		}		
+		}
 
 		/*
 		 * Bound is 1.17*sqrt(q). We compute the squared
@@ -4381,80 +4367,57 @@ Zf(keygen)(inner_shake256_context *rng,
 		 * Since f and g are integral, the squared norm
 		 * of (g,-f) is an integer.
 		 */
-
+		CYCLES_START
 		normf = poly_small_sqnorm(f, logn);
 		normg = poly_small_sqnorm(g, logn);
-		
 		norm = (normf + normg) | -((normf | normg) >> 31);
 		if (norm >= 16823) {
 			continue;
 		}
+		CYCLES_ADD(*pss)			
 
 		/*
 		 * We compute the orthogonalized vector norm.
 		 */
 		rt1 = (fpr *)tmp;
-		rt2 = rt1 + n; // takes 1 clk
-		rt3 = rt2 + n; // takes 1 clk
+		rt2 = rt1 + n;
+		rt3 = rt2 + n;
 		
-		pc.printf("-------------------\n\r");
-		pc.printf("poly small to fp---\n\r");
-		CALC_RESET
-		for (size_t r=0; r<BENCHMARK_ROUND; r++) {
-			CALC_START	
-			poly_small_to_fp(rt1, f, logn);
-			poly_small_to_fp(rt2, g, logn);
-			CALC_STOP
-		}
-		CALC_AVG
-		pc.printf("Avg clock cycles:        %.0f\n\r", (average_clk));
-		pc.printf("Min clock cycles:        %lld\n\r", min);
-		pc.printf("Max clock cycles:        %lld\n\r", max);
-		pc.printf("Std dev of clock cycles: %.1f\n\r", (sqrt(var)));
-		pc.printf("Std err of clock cycles: %.1f\n\r", (std_err));
-		
-		pc.printf("-------------------\n\r");
-		pc.printf("FFT calculation---\n\r");
-		CALC_RESET
-		for (size_t r=0; r<BENCHMARK_ROUND; r++) {
-			CALC_START
-			Zf(FFT)(rt1, logn);
-			Zf(FFT)(rt2, logn);
-			CALC_STOP
-		}
-		CALC_AVG
-		pc.printf("Avg clock cycles:        %.0f\n\r", (average_clk));
-		pc.printf("Min clock cycles:        %lld\n\r", min);
-		pc.printf("Max clock cycles:        %lld\n\r", max);
-		pc.printf("Std dev of clock cycles: %.1f\n\r", (sqrt(var)));
-		pc.printf("Std err of clock cycles: %.1f\n\r", (std_err));
+		CYCLES_START
+		poly_small_to_fp(rt1, f, logn);
+		poly_small_to_fp(rt2, g, logn);
+		CYCLES_ADD(*pstf)
 
+		CYCLES_START
+		Zf(FFT)(rt1, logn);
+		Zf(FFT)(rt2, logn);
+		CYCLES_ADD(*fft)
+
+		CYCLES_START
 		Zf(poly_invnorm2_fft)(rt3, rt1, rt2, logn);
+		CYCLES_ADD(*pif)
+		
+		CYCLES_START
 		Zf(poly_adj_fft)(rt1, logn);
 		Zf(poly_adj_fft)(rt2, logn);
-
+		CYCLES_ADD(*paf)
+		
+		CYCLES_START
 		Zf(poly_mulconst)(rt1, fpr_q, logn);
 		Zf(poly_mulconst)(rt2, fpr_q, logn);
-
+		CYCLES_ADD(*pm)
+		
+		CYCLES_START
 		Zf(poly_mul_autoadj_fft)(rt1, rt3, logn);
 		Zf(poly_mul_autoadj_fft)(rt2, rt3, logn);
-
-		pc.printf("-------------------\n\r");
-		pc.printf("iFFT calculation---\n\r");
-		CALC_RESET
-		for (size_t r=0; r<BENCHMARK_ROUND; r++) {
-			CALC_START
-			Zf(iFFT)(rt1, logn);
-			Zf(iFFT)(rt2, logn);
-			CALC_STOP
-		}
-		CALC_AVG
-		pc.printf("Avg clock cycles:        %.0f\n\r", (average_clk));
-		pc.printf("Min clock cycles:        %lld\n\r", min);
-		pc.printf("Max clock cycles:        %lld\n\r", max);
-		pc.printf("Std dev of clock cycles: %.1f\n\r", (sqrt(var)));
-		pc.printf("Std err of clock cycles: %.1f\n\r", (std_err));
+		CYCLES_ADD(*pmaf)
 		
+		CYCLES_START
+		Zf(iFFT)(rt1, logn);
+		Zf(iFFT)(rt2, logn);
+		CYCLES_ADD(*ifft)
+		
+		CYCLES_START			
 		bnorm = fpr_zero;
 		for (u = 0; u < n; u ++) {
 			bnorm = fpr_add(bnorm, fpr_sqr(rt1[u]));
@@ -4463,11 +4426,13 @@ Zf(keygen)(inner_shake256_context *rng,
 		if (!fpr_lt(bnorm, fpr_bnorm_max)) {
 			continue;
 		}
-
+		CYCLES_ADD(*bfa)
+		
 		/*
 		 * Compute public key h = g/f mod X^N+1 mod q. If this
 		 * fails, we must restart.
 		 */
+		CYCLES_START			
 		if (h == NULL) {
 			h2 = (uint16_t *)tmp;
 			tmp2 = h2 + n;
@@ -4478,19 +4443,21 @@ Zf(keygen)(inner_shake256_context *rng,
 		if (!Zf(compute_public)(h2, f, g, logn, (uint8_t *)tmp2)) {
 			continue;
 		}
-
+		CYCLES_ADD(*cpk)
 		/*
 		 * Solve the NTRU equation to get F and G.
 		 */
+		CYCLES_START			
 		lim = (1 << (Zf(max_FG_bits)[logn] - 1)) - 1;
 		if (!solve_NTRU(logn, F, G, f, g, lim, (uint32_t *)tmp)) {
 			continue;
 		}
-
+		CYCLES_ADD(*sn)
 		/*
 		 * Key pair is generated.
 		 */
 		break;
+		//}
 	}
 }
 
@@ -4510,79 +4477,136 @@ falcon_keygen_make(
 	uint8_t *sk, *pk;
 	unsigned oldcw;
 
-	/*
-	 * Check parameters.
-	 */
-	if (logn < 1 || logn > 10) {
-		return FALCON_ERR_BADARG;
-	}
-	if (privkey_len < FALCON_PRIVKEY_SIZE(logn)
-		|| (pubkey != NULL && pubkey_len < FALCON_PUBKEY_SIZE(logn))
-		|| tmp_len < FALCON_TMPSIZE_KEYGEN(logn))
-	{
-		return FALCON_ERR_SIZE;
-	}
+	//set so that cycle counter can be read from  DWT->CYCCNT
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->LAR = 0xC5ACCE55;
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+	
+	CYCLES_VARS
 
-	/*
-	 * Prepare buffers and generate private key.
-	 */
-	n = (size_t)1 << logn;
-	f = (int8_t*)tmp;
-	g = f + n;
-	F = g + n;
-	atmp = align_u64(F + n);
-	oldcw = set_fpu_cw(2);
-	Zf(keygen)((inner_shake256_context *)rng,
-		f, g, F, NULL, NULL, logn, atmp);
-	set_fpu_cw(oldcw);
+	// keygen function ccounts
+	uint64_t ntrugen, epk, rpkaei;
+	ntrugen = epk = rpkaei = 0;
+	// ntrugen counts
+	uint64_t psm, pss, pstf, fft, pif, paf, pm, pmaf, ifft, bfa, cpk, sn;
+	psm = pss = pstf = fft = pif = paf = pm = pmaf = ifft = bfa = cpk = sn = 0;
+	
+	for (size_t i=0; i<BENCHMARK_ROUND; i++) {
 
-	/*
-	 * Encode private key.
-	 */
-	sk = (uint8_t*)privkey;
-	sk_len = FALCON_PRIVKEY_SIZE(logn);
-	sk[0] = 0x50 + logn;
-	u = 1;
-	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
-		f, logn, Zf(max_fg_bits)[logn]);
-	if (v == 0) {
-		return FALCON_ERR_INTERNAL;
-	}
-	u += v;
-	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
-		g, logn, Zf(max_fg_bits)[logn]);
-	if (v == 0) {
-		return FALCON_ERR_INTERNAL;
-	}
-	u += v;
-	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
-		F, logn, Zf(max_FG_bits)[logn]);
-	if (v == 0) {
-		return FALCON_ERR_INTERNAL;
-	}
-	u += v;
-	if (u != sk_len) {
-		return FALCON_ERR_INTERNAL;
-	}
+		timer.reset();
+		timer.start();
+	
+		DWT->CYCCNT = 0;
 
-	/*
-	 * Recompute public key and encode it.
-	 */
-	if (pubkey != NULL) {
-		h = (uint16_t *)align_u16(g + n);
-		atmp = (uint8_t *)(h + n);
-		if (!Zf(compute_public)(h, f, g, logn, atmp)) {
+		/*
+		 * Check parameters.
+		 */
+		if (logn < 1 || logn > 10) {
+			return FALCON_ERR_BADARG;
+		}
+		if (privkey_len < FALCON_PRIVKEY_SIZE(logn)
+			|| (pubkey != NULL && pubkey_len < FALCON_PUBKEY_SIZE(logn))
+			|| tmp_len < FALCON_TMPSIZE_KEYGEN(logn))
+		{
+			return FALCON_ERR_SIZE;
+		}
+
+		/*
+		 * Prepare buffers and generate private key.
+		 */
+		//CYCLES_START
+		n = (size_t)1 << logn;
+		f = (int8_t*)tmp;
+		g = f + n;
+		F = g + n;
+		atmp = align_u64(F + n);
+		oldcw = set_fpu_cw(2);
+		Zf(keygen)((inner_shake256_context *)rng,
+			f, g, F, NULL, NULL, logn, atmp,
+			&psm, &pss, &pstf, &fft, &pif,
+			&paf, &pm, &pmaf, &ifft, &bfa, &cpk, &sn);
+		set_fpu_cw(oldcw);
+		//CYCLES_ADD(ntrugen)
+		//pc.printf("ntrugen is:  %lld\n\r", ntrugen);
+
+		CYCLES_START
+		/*
+		 * Encode private key.
+		 */
+		sk = (uint8_t*)privkey;
+		sk_len = FALCON_PRIVKEY_SIZE(logn);
+		sk[0] = 0x50 + logn;
+		u = 1;
+		v = Zf(trim_i8_encode)(sk + u, sk_len - u,
+			f, logn, Zf(max_fg_bits)[logn]);
+		if (v == 0) {
 			return FALCON_ERR_INTERNAL;
 		}
-		pk = (uint8_t*)pubkey;
-		pk_len = FALCON_PUBKEY_SIZE(logn);
-		pk[0] = 0x00 + logn;
-		v = Zf(modq_encode)(pk + 1, pk_len - 1, h, logn);
-		if (v != pk_len - 1) {
+		u += v;
+		v = Zf(trim_i8_encode)(sk + u, sk_len - u,
+			g, logn, Zf(max_fg_bits)[logn]);
+		if (v == 0) {
 			return FALCON_ERR_INTERNAL;
 		}
-	}
+		u += v;
+		v = Zf(trim_i8_encode)(sk + u, sk_len - u,
+			F, logn, Zf(max_FG_bits)[logn]);
+		if (v == 0) {
+			return FALCON_ERR_INTERNAL;
+		}
+		u += v;
+		if (u != sk_len) {
+			return FALCON_ERR_INTERNAL;
+		}
+		CYCLES_ADD(epk)
 
+		timer.reset();
+		timer.start();
+
+		CYCLES_START
+		/*
+		 * Recompute public key and encode it.
+		 */
+		if (pubkey != NULL) {
+			h = (uint16_t *)align_u16(g + n);
+			atmp = (uint8_t *)(h + n);
+			if (!Zf(compute_public)(h, f, g, logn, atmp)) {
+				return FALCON_ERR_INTERNAL;
+			}
+			pk = (uint8_t*)pubkey;
+			pk_len = FALCON_PUBKEY_SIZE(logn);
+			pk[0] = 0x00 + logn;
+			v = Zf(modq_encode)(pk + 1, pk_len - 1, h, logn);
+			if (v != pk_len - 1) {
+				return FALCON_ERR_INTERNAL;
+			}
+		}
+		CYCLES_ADD(rpkaei)
+	}
+	
+	uint64_t total = psm + pss + pstf + fft + pif + paf + pm + pmaf + ifft + bfa + cpk + sn + epk + rpkaei;
+	
+	pc.printf("Inside NTRU_GEN clocks...........\n\r");
+	pc.printf("poly_small_mkgauss clocks:   %lld (%f%%)\n\r",psm/BENCHMARK_ROUND,(double)((double)psm/(double)total)*100);
+	pc.printf("poly_small_sqnorm clocks:    %lld (%f%%)\n\r", pss/BENCHMARK_ROUND,(double)((double)pss/(double)total)*100);
+	pc.printf("poly_small_to_fp clocks:     %lld (%f%%)\n\r", pstf/BENCHMARK_ROUND,(double)((double)pstf/(double)total)*100);
+	pc.printf("FFT clocks:                  %lld (%f%%)\n\r", fft/BENCHMARK_ROUND,(double)((double)fft/(double)total)*100);
+	pc.printf("poly_invnorm2_fft clocks:    %lld (%f%%)\n\r", pif/BENCHMARK_ROUND,(double)((double)pif/(double)total)*100);
+	pc.printf("poly_adj_fft clocks:         %lld (%f%%)\n\r", paf/BENCHMARK_ROUND,(double)((double)paf/(double)total)*100);
+	pc.printf("poly_mulconst clocks:        %lld (%f%%)\n\r", pm/BENCHMARK_ROUND,(double)((double)pm/(double)total)*100);
+	pc.printf("poly_mul_autoadj_fft clocks: %lld (%f%%)\n\r", pmaf/BENCHMARK_ROUND,(double)((double)pmaf/(double)total)*100);
+	pc.printf("iFFT clocks:                 %lld (%f%%)\n\r", ifft/BENCHMARK_ROUND,(double)((double)ifft/(double)total)*100);
+	pc.printf("bnorm/fpr_add clocks:        %lld (%f%%)\n\r", bfa/BENCHMARK_ROUND,(double)((double)bfa/(double)total)*100);
+	pc.printf("compute public key clocks:   %lld (%f%%)\n\r", cpk/BENCHMARK_ROUND,(double)((double)cpk/(double)total)*100);
+	pc.printf("solve_NTRU clocks:           %lld (%f%%)\n\r", sn/BENCHMARK_ROUND,(double)((double)sn/(double)total)*100);
+	pc.printf("---------------------------------\n\r");
+	pc.printf("total ntru_gen clocks:       %lld (%f%%)\n\r", (total-(epk + rpkaei))/BENCHMARK_ROUND,(double)((double)(total-(epk + rpkaei))/(double)total)*100);
+	pc.printf("encode priv key clocks:      %lld (%f%%)\n\r", epk/BENCHMARK_ROUND,(double)((double)epk/(double)total)*100);
+	pc.printf("recomp priv key and encode:  %lld (%f%%)\n\r", rpkaei/BENCHMARK_ROUND,(double)((double)rpkaei/(double)total)*100);
+	pc.printf("---------------------------------\n\r");
+	pc.printf("total keygen clocks:         %lld (%f%%)\n\r", total/BENCHMARK_ROUND,(double)((double)total/(double)total)*100);
+	pc.printf("---------------------------------\n\r");
 	return 0;
 }
 
@@ -5060,69 +5084,7 @@ uint32_t rand16(void) {
 int main()
 {
 
-		///////////////////////////////////////////////////////
-	// code for taking timing---
-	///////////////////////////////////////////////////////
-	
-	#define BENCHMARK_ROUND 100
-	uint64_t start, stop, delta, delta_old, min, max;
-	int us, cnt;
-	long double average_us, average_clk, avclk_old, var, std_err;
-
-	#define MIN(a,b) (((a)<(b))?(a):(b))
-	#define MAX(a,b) (((a)>(b))?(a):(b))
-
-	#define CALC_RESET {		 \
-		delta       = 0;         \
-		delta_old   = 0;         \
-		var         = 0;         \
-		average_clk = 0;	 \
-		average_us  = 0;	 \
-		delta_old   = 0;         \
-		avclk_old   = 0;         \
-		min         = 9999999999;\
-		max         = 0;         \
-		timer.reset();		 \
-		cnt = 1;		 \
-	}
-	
-	#define CALC_START {		 \
-		wait(0.01);           \
-		timer.reset();		 \
-		timer.start();		 \
-		start = DWT->CYCCNT;	 \
-	}
-	
-	#define CALC_STOP {		 		 \
-		stop         = DWT->CYCCNT;     	 \
-		us           = timer.read_us(); 	 \
-		delta_old    = delta;                    \
-		avclk_old    = average_clk;              \
-		delta        = stop - start;             \
-		average_clk += (long double)(delta-average_clk)/cnt;	 \
-		var         += (long double)((delta-average_clk)*(delta-avclk_old))/cnt; \
-		average_us  += (long double)(us-average_us)/cnt;	 \
-		min          = MIN(delta,min);           \
-		max          = MAX(delta,max);           \
-		cnt         += 1;			 \
-		wait(0.001);                           \
-	}
-	
-	#define CALC_AVG {				 \
-		std_err      = sqrt(var/cnt);            \
-	}
-
-	#define timer_read_ms(x)    chrono::duration_cast<chrono::milliseconds>((x).elapsed_time()).count()
-
-	//set so that cycle counter can be read from  DWT->CYCCNT
-	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-	DWT->LAR = 0xC5ACCE55;
-	DWT->CYCCNT = 0;
-	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
-	///////////////////////////////////////////////////////
-	
 	int ret_val = 0;
-	
 	int i = 3;
 	while(i > 0) {
 		wait(1);
@@ -5148,6 +5110,9 @@ int main()
 	//uint8_t nonce[40];
 	void *tmpkg, *tmpsd, *tmpmp, *tmpvv, *tmpek, *tmpst;
 	size_t tmpkg_len, tmpvv_len, tmpmp_len, tmpsd_len, tmpek_len, tmpst_len;
+	
+	// variable for clock counting
+	uint64_t kg;
 	
 	fflush(stdout);
 	
@@ -5185,21 +5150,12 @@ int main()
 	pc.printf("| Doing Key Generation |\n\r");
 	pc.printf("------------------------\n\r");
 
-	//CALC_RESET
-	//for (size_t r=0; r<BENCHMARK_ROUND; r++) {
 	memset(privkey, 0, privkey_len);
 	memset(pubkey, 0, pubkey_len);
-		//CALC_START
-	ret_val = falcon_keygen_make(&rng, logn, privkey, privkey_len,
-		pubkey, pubkey_len, tmpkg, tmpkg_len);
-		//CALC_STOP
-	//}
-	//CALC_AVG
+	
+	ret_val = falcon_keygen_make(&rng, logn, privkey, 
+		privkey_len, pubkey, pubkey_len, tmpkg, tmpkg_len);
 
-//	pc.printf("Key Generation clock cycles taken: %lld\n\r", delta);
-//        pc.printf("Key Generation time taken in microsecs: %d\n\r", us);
-//        pc.printf("Key Generation failed if nonzero: %d\n\r", ret_val);
-        
 //	memset(pubkey2, 0xFF, pubkey_len);
 //	ret_val = falcon_make_public(pubkey2, pubkey_len,
 //			privkey, privkey_len, tmpmp, tmpmp_len);
@@ -5392,854 +5348,6 @@ int main()
 	fflush(stdout);
 	*/
 	
-	#define MUL31(x, y)   ((uint64_t)((x) | (uint32_t)0x80000000) \
-		               * (uint64_t)((y) | (uint32_t)0x80000000) \
-		               - ((uint64_t)(x) << 31) - ((uint64_t)(y) << 31) \
-		               - ((uint64_t)1 << 62))
-		               
-	#define MUL15(x, y)   ((uint32_t)((x) | (uint32_t)0x80000000) \
-		               * (uint32_t)((y) | (uint32_t)0x80000000) \
-		               & (uint32_t)0x3FFFFFFF)
-	
-	#define rounds        5000
-	
-	fflush(stdout);
-	wait(1);
-
-	pc.printf("-------------------------\n\r");
-	pc.printf("Testing multiplication---\n\r");
-	pc.printf("-------------------------\n\r");
-	
-	/// function for 32->32 mult
-	pc.printf("-------------------\n\r");
-	pc.printf("32->32 mult--------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32();
-//		uint32_t r2  = rand32();
-		uint32_t res = 0;
-		CALC_START
-		res = (uint32_t)r1*r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for 32->64 mult
-	pc.printf("-------------------\n\r");
-	pc.printf("32->64 mult--------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)r1*r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for MUL31 and MUL15
-	pc.printf("-------------------\n\r");
-	pc.printf("MUL15 mult---------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){
-		uint16_t r1  = rand16() >> 1;
-		uint16_t r2  = 0;
-		if (r % 16 == 0) continue; else (r2 = rand16() >> 1);
-		uint32_t res = 0;
-		CALC_START
-		res = MUL15(r1, r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-	
-	fflush(stdout);
-	wait(1);
-		
-	pc.printf("-------------------\n\r");
-	pc.printf("MUL31 mult---------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32() >> 1;
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32() >> 1;
-		uint64_t res = 0;
-		CALC_START
-		res = MUL31(r1, r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-	
-	fflush(stdout);
-	wait(1);
-
-	/// function for 64->64 mult
-	pc.printf("-------------------\n\r");
-	pc.printf("64->64 mult--------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint64_t r1  = rand64();
-		uint64_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand64();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)r1*r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-//////////////////////////////////////////////////////////////////////////////////////////
-
-	/// function for 32->32 mult
-	pc.printf("-------------------\n\r");
-	pc.printf("float->float mult--\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		float r1  = (float)(rand64()/rand16());
-		float r2  = 0;
-		if (r % 16 == 0) continue; else r2 = (float)(rand64()/rand16());
-		CALC_START
-		float res = r1*r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for 32->64 mult
-	pc.printf("-------------------\n\r");
-	pc.printf("float->double mult.\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		float r1  = (float)(rand64()/rand16());
-		float r2  = 0;
-		if (r % 16 == 0) continue; else r2 = (float)(rand64()/rand16());
-		CALC_START
-		double res = (double)r1*r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for 64->64 mult
-	pc.printf("-------------------\n\r");
-	pc.printf("double->double mult\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		double r1  = (double)(rand64()/rand16());
-		double r2  = 0;
-		if (r % 16 == 0) continue; else r2 = (double)(rand64()/rand16());
-		CALC_START
-		double res = r1*r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-//////////////////////////////////////////////////////////////////////////////////////////
-	pc.printf("-------------------------\n\r");
-	pc.printf("Testing Division---------\n\r");
-	pc.printf("-------------------------\n\r");
-	// casting to uints, rather than floats as I think this
-	// might be more of the point of Pornin in BearSSL:
-	// https://www.bearssl.org/ctmul.html	
-	
-	/// function for 32->32 div
-	pc.printf("-------------------\n\r");
-	pc.printf("32->32 div---------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32();
-		uint32_t res = 0;
-		CALC_START
-		res = (uint32_t)r1/r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for 32->64 div
-	pc.printf("-------------------\n\r");
-	pc.printf("32->64 div---------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)r1/r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for 64->64 div
-	pc.printf("-------------------\n\r");
-	pc.printf("64->64 div---------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint64_t r1  = rand64();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand64();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)r1/r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-////////////////////////////////////////////////////////////////////////
-	pc.printf("-------------------------\n\r");
-	pc.printf("Testing L/R shifts-------\n\r");
-	pc.printf("-------------------------\n\r");
-	// casting to uints, rather than floats as I think this
-	// might be more of the point of Pornin in BearSSL:
-	// https://www.bearssl.org/ctmul.html	
-	
-	/// function for 32->32 rshift
-	pc.printf("-------------------\n\r");
-	pc.printf("32->32 lshift------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32();
-		uint32_t res = 0;
-		CALC_START
-		res = (uint32_t)r1 << r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for 32->32 lshift
-	pc.printf("-------------------\n\r");
-	pc.printf("32->32 rshift------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32();
-		uint32_t res = 0;
-		CALC_START
-		res = (uint32_t)r1 >> r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for 32->64 lshift
-	pc.printf("-------------------\n\r");
-	pc.printf("32->64 lshift------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)r1 << r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for 32->64 rshift
-	pc.printf("-------------------\n\r");
-	pc.printf("32->64 rshift------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand32();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)r1 >> r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for 64->64 lshift
-	pc.printf("-------------------\n\r");
-	pc.printf("64->64 lshift------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint64_t r1  = rand64();
-		uint64_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand64();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)r1 << r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for 64->64 rshift
-	pc.printf("-------------------\n\r");
-	pc.printf("64->64 rshift------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint64_t r1  = rand64();
-		uint64_t r2  = 0;
-		if (r % 16 == 0) continue; else r2 = rand64();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)r1 >> r2;
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	pc.printf("-------------------------\n\r");
-	pc.printf("Testing Sqrt-------------\n\r");
-	pc.printf("-------------------------\n\r");
-	// casting to uints, rather than floats as I think this
-	// might be more of the point of Pornin in BearSSL:
-	// https://www.bearssl.org/ctmul.html	
-	
-	/// function for 32->32 sqrt
-	pc.printf("-------------------\n\r");
-	pc.printf("32->32 sqrt--------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint32_t res = 0;
-		CALC_START
-		res = (uint32_t)sqrt(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for 32->64 dqrt
-	pc.printf("-------------------\n\r");
-	pc.printf("32->64 sqrt--------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint32_t r1  = rand32();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)sqrt(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for 64->64 sqrt
-	pc.printf("-------------------\n\r");
-	pc.printf("64->64 sqrt--------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint64_t r1  = rand64();
-		uint64_t res = 0;
-		CALC_START
-		res = (uint64_t)sqrt(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-//////////////////////////////////////////////////////////////////////////
-	/// function for fpr add
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr add------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		fpr r2  = fpr_zero;
-		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_add(r1,r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for fpr sub
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr sub------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		fpr r2  = fpr_zero;
-		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_sub(r1,r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr floor
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr floor----------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		CALC_START
-		int64_t res = fpr_floor(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr mul
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr mul------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		fpr r2  = fpr_zero;
-		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_mul(r1,r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for fpr sqr
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr sqr------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_sqr(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr inv
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr inv------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_inv(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for fpr div
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr div------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		fpr r2  = fpr_zero;
-		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_div(r1,r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr ursh
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr ursh-----------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint64_t r1  = rand64();
-		int r2  = rand16() >> 10;
-		CALC_START
-		uint64_t res = fpr_ursh(r1,r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for fpr irsh
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr irsh-----------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		int64_t r1  = rand64();
-		int r2  = rand16() >> 10;
-		CALC_START
-		int64_t res = fpr_ursh(r1,r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr ulsh
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr ulsh-----------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint64_t r1  = rand64();
-		int r2  = rand16() >> 10;
-		CALC_START
-		uint64_t res = fpr_ursh(r1,r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr of
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr of-------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		uint64_t r1  = rand64();
-		CALC_START
-		fpr res = fpr_of(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	/// function for fpr rint
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr rint-----------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		CALC_START
-		int64_t res = fpr_rint(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr trunc
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr trunc----------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		CALC_START
-		int64_t res = fpr_trunc(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr neg
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr neg------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_neg(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr half
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr half-----------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_half(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr double
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr double---------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		CALC_START
-		fpr res = fpr_double(r1);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-	
-	/// function for fpr lt
-	pc.printf("-------------------\n\r");
-	pc.printf("fpr lt-------------\n\r");
-	CALC_RESET
-	for(size_t r=0; r<rounds; r++){ 
-		fpr r1  = FPR((double)rand64());
-		fpr r2  = fpr_zero;
-		if (r % 16 == 0) continue; else r2 = FPR((double)rand64());
-		CALC_START
-		int res = fpr_lt(r1,r2);
-		CALC_STOP
-	}	
-	CALC_AVG
-	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
-	pc.printf("Min clock cycles:        %lld\n\r", min);
-	pc.printf("Max clock cycles:        %lld\n\r", max);
-	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
-	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
-
-	fflush(stdout);
-	wait(1);
-
-	pc.printf("Testing finished");		
 }
 
 

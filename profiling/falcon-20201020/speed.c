@@ -324,18 +324,18 @@ test_speed_falcon(unsigned logn, double threshold)
 	printf(" %8.2f",
 		do_bench(&bench_sign_dyn_ct, &bc, threshold) / 1000.0);
 	fflush(stdout);
-	printf(" %8.2f",
-		do_bench(&bench_sign_tree, &bc, threshold) / 1000.0);
-	fflush(stdout);
-	printf(" %8.2f",
-		do_bench(&bench_sign_tree_ct, &bc, threshold) / 1000.0);
-	fflush(stdout);
-	printf(" %8.2f",
-		do_bench(&bench_verify, &bc, threshold) / 1000.0);
-	fflush(stdout);
-	printf(" %8.2f",
-		do_bench(&bench_verify_ct, &bc, threshold) / 1000.0);
-	fflush(stdout);
+/*	printf(" %8.2f",*/
+/*		do_bench(&bench_sign_tree, &bc, threshold) / 1000.0);*/
+/*	fflush(stdout);*/
+/*	printf(" %8.2f",*/
+/*		do_bench(&bench_sign_tree_ct, &bc, threshold) / 1000.0);*/
+/*	fflush(stdout);*/
+/*	printf(" %8.2f",*/
+/*		do_bench(&bench_verify, &bc, threshold) / 1000.0);*/
+/*	fflush(stdout);*/
+/*	printf(" %8.2f",*/
+/*		do_bench(&bench_verify_ct, &bc, threshold) / 1000.0);*/
+/*	fflush(stdout);*/
 
 	printf("\n");
 	fflush(stdout);
@@ -375,8 +375,8 @@ main(int argc, char *argv[])
 	printf("\n");
 	printf("degree  kg(ms)   ek(us)   sd(us)  sdc(us)   st(us)  stc(us)   vv(us)  vvc(us)\n");
 	fflush(stdout);
-	test_speed_falcon(8, threshold);
+	//test_speed_falcon(8, threshold);
 	test_speed_falcon(9, threshold);
-	test_speed_falcon(10, threshold);
+	//test_speed_falcon(10, threshold);
 	return 0;
 }

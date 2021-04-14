@@ -4290,7 +4290,7 @@ Zf(keygen)(inner_shake256_context *rng,
 		 */
 		lim = (1 << (Zf(max_FG_bits)[logn] - 1)) - 1;
 		if (!solve_NTRU(logn, F, G, f, g, lim, (uint32_t *)tmp)) {
-			continue;
+			continue;	
 		}
 
 		/*

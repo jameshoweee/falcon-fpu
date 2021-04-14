@@ -43,10 +43,10 @@
 #               code that calls this library may need: -lm
 #               (normally not needed on x86, both 32-bit and 64-bit)
 
-CC = clang
-CFLAGS = -Wall -Wextra -Wshadow -Wundef -O3 #-pg -fno-pie
-LD = clang
-LDFLAGS = #-pg -no-pie
+CC = gcc
+CFLAGS = -Wall -pg -g -Wextra -Wshadow -Wundef -O3
+LD = gcc
+LDFLAGS = -Wall -pg -g -Wextra -Wshadow -Wundef -O3
 LIBS = #-lm
 
 # =====================================================================

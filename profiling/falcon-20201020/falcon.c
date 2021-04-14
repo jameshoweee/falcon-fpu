@@ -124,96 +124,84 @@ align_fpr(void *tmp)
 }
 
 /* see falcon.h */
-int
-falcon_keygen_make(
-	shake256_context *rng,
-	unsigned logn,
-	void *privkey, size_t privkey_len,
-	void *pubkey, size_t pubkey_len,
-	void *tmp, size_t tmp_len)
-{
-	int8_t *f, *g, *F;
-	uint16_t *h;
-	uint8_t *atmp;
-	size_t n, u, v, sk_len, pk_len;
-	uint8_t *sk, *pk;
-	unsigned oldcw;
+/*int*/
+/*falcon_keygen_make(*/
+/*	shake256_context *rng,*/
+/*	unsigned logn,*/
+/*	void *privkey, size_t privkey_len,*/
+/*	void *pubkey, size_t pubkey_len,*/
+/*	void *tmp, size_t tmp_len)*/
+/*{*/
+/*	int8_t *f, *g, *F;*/
+/*	uint16_t *h;*/
+/*	uint8_t *atmp;*/
+/*	size_t n, u, v, sk_len, pk_len;*/
+/*	uint8_t *sk, *pk;*/
+/*	unsigned oldcw;*/
 
-	/*
-	 * Check parameters.
-	 */
-	if (logn < 1 || logn > 10) {
-		return FALCON_ERR_BADARG;
-	}
-	if (privkey_len < FALCON_PRIVKEY_SIZE(logn)
-		|| (pubkey != NULL && pubkey_len < FALCON_PUBKEY_SIZE(logn))
-		|| tmp_len < FALCON_TMPSIZE_KEYGEN(logn))
-	{
-		return FALCON_ERR_SIZE;
-	}
+/*	if (logn < 1 || logn > 10) {*/
+/*		return FALCON_ERR_BADARG;*/
+/*	}*/
+/*	if (privkey_len < FALCON_PRIVKEY_SIZE(logn)*/
+/*		|| (pubkey != NULL && pubkey_len < FALCON_PUBKEY_SIZE(logn))*/
+/*		|| tmp_len < FALCON_TMPSIZE_KEYGEN(logn))*/
+/*	{*/
+/*		return FALCON_ERR_SIZE;*/
+/*	}*/
 
-	/*
-	 * Prepare buffers and generate private key.
-	 */
-	n = (size_t)1 << logn;
-	f = tmp;
-	g = f + n;
-	F = g + n;
-	atmp = align_u64(F + n);
-	oldcw = set_fpu_cw(2);
-	Zf(keygen)((inner_shake256_context *)rng,
-		f, g, F, NULL, NULL, logn, atmp);
-	set_fpu_cw(oldcw);
+/*	n = (size_t)1 << logn;*/
+/*	f = tmp;*/
+/*	g = f + n;*/
+/*	F = g + n;*/
+/*	atmp = align_u64(F + n);*/
+/*	oldcw = set_fpu_cw(2);*/
+/*	Zf(keygen)((inner_shake256_context *)rng,*/
+/*		f, g, F, NULL, NULL, logn, atmp);*/
+/*	set_fpu_cw(oldcw);*/
 
-	/*
-	 * Encode private key.
-	 */
-	sk = privkey;
-	sk_len = FALCON_PRIVKEY_SIZE(logn);
-	sk[0] = 0x50 + logn;
-	u = 1;
-	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
-		f, logn, Zf(max_fg_bits)[logn]);
-	if (v == 0) {
-		return FALCON_ERR_INTERNAL;
-	}
-	u += v;
-	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
-		g, logn, Zf(max_fg_bits)[logn]);
-	if (v == 0) {
-		return FALCON_ERR_INTERNAL;
-	}
-	u += v;
-	v = Zf(trim_i8_encode)(sk + u, sk_len - u,
-		F, logn, Zf(max_FG_bits)[logn]);
-	if (v == 0) {
-		return FALCON_ERR_INTERNAL;
-	}
-	u += v;
-	if (u != sk_len) {
-		return FALCON_ERR_INTERNAL;
-	}
+/*	sk = privkey;*/
+/*	sk_len = FALCON_PRIVKEY_SIZE(logn);*/
+/*	sk[0] = 0x50 + logn;*/
+/*	u = 1;*/
+/*	v = Zf(trim_i8_encode)(sk + u, sk_len - u,*/
+/*		f, logn, Zf(max_fg_bits)[logn]);*/
+/*	if (v == 0) {*/
+/*		return FALCON_ERR_INTERNAL;*/
+/*	}*/
+/*	u += v;*/
+/*	v = Zf(trim_i8_encode)(sk + u, sk_len - u,*/
+/*		g, logn, Zf(max_fg_bits)[logn]);*/
+/*	if (v == 0) {*/
+/*		return FALCON_ERR_INTERNAL;*/
+/*	}*/
+/*	u += v;*/
+/*	v = Zf(trim_i8_encode)(sk + u, sk_len - u,*/
+/*		F, logn, Zf(max_FG_bits)[logn]);*/
+/*	if (v == 0) {*/
+/*		return FALCON_ERR_INTERNAL;*/
+/*	}*/
+/*	u += v;*/
+/*	if (u != sk_len) {*/
+/*		return FALCON_ERR_INTERNAL;*/
+/*	}*/
 
-	/*
-	 * Recompute public key and encode it.
-	 */
-	if (pubkey != NULL) {
-		h = (uint16_t *)align_u16(g + n);
-		atmp = (uint8_t *)(h + n);
-		if (!Zf(compute_public)(h, f, g, logn, atmp)) {
-			return FALCON_ERR_INTERNAL;
-		}
-		pk = pubkey;
-		pk_len = FALCON_PUBKEY_SIZE(logn);
-		pk[0] = 0x00 + logn;
-		v = Zf(modq_encode)(pk + 1, pk_len - 1, h, logn);
-		if (v != pk_len - 1) {
-			return FALCON_ERR_INTERNAL;
-		}
-	}
+/*	if (pubkey != NULL) {*/
+/*		h = (uint16_t *)align_u16(g + n);*/
+/*		atmp = (uint8_t *)(h + n);*/
+/*		if (!Zf(compute_public)(h, f, g, logn, atmp)) {*/
+/*			return FALCON_ERR_INTERNAL;*/
+/*		}*/
+/*		pk = pubkey;*/
+/*		pk_len = FALCON_PUBKEY_SIZE(logn);*/
+/*		pk[0] = 0x00 + logn;*/
+/*		v = Zf(modq_encode)(pk + 1, pk_len - 1, h, logn);*/
+/*		if (v != pk_len - 1) {*/
+/*			return FALCON_ERR_INTERNAL;*/
+/*		}*/
+/*	}*/
 
-	return 0;
-}
+/*	return 0;*/
+/*}*/
 
 /* see falcon.h */
 int
