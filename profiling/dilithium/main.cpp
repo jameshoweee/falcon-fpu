@@ -38,7 +38,7 @@ Timer timer;
 // code for taking timing---
 ///////////////////////////////////////////////////////
 
-#define BENCHMARK_ROUND 125
+#define BENCHMARK_ROUND 1000
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
@@ -459,26 +459,7 @@ int main()
 		pc.printf("This program runs will run in %d seconds.\n\r", i--);
 		myled = !myled;
 	}
-
-	/*
- 	* Falcon code below taken from optimised, using the native FPU.
-	* ret_val outputs 0 if functions work as expected.
-	* comment code out below to switch between Falcon and Dilithium.
-	*/
-
-	unsigned logn = 9; // set to 9 for 512 parameters, 10 for 1024
-	char seed[16] = {0};
-	//shake256_context sc;
-	//shake256_init_prng_from_seed(&sc, seed, 16);
-
-	void *pubkey, *privkey, *expkey, *sig, *pubkey2, *sigct;
-	size_t pubkey_len, privkey_len, sig_len, expkey_len;
-	//shake256_context rng;
-	//shake256_context hd;
-	//uint8_t nonce[40];
-	void *tmpkg, *tmpsd, *tmpmp, *tmpvv, *tmpek, *tmpst;
-	size_t tmpkg_len, tmpvv_len, tmpmp_len, tmpsd_len, tmpek_len, tmpst_len;
-	
+		
 	//set so that cycle counter can be read from  DWT->CYCCNT
 	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 	DWT->LAR = 0xC5ACCE55;
@@ -510,11 +491,11 @@ int main()
 	*/
 
 	#define MLEN 59
-	size_t mlen, smlen;
+	size_t smlen; //mlen
 	uint8_t pk[CRYPTO_PUBLICKEYBYTES] = {0};
 	uint8_t sk[CRYPTO_SECRETKEYBYTES] = {0};
 	uint8_t m[MLEN + CRYPTO_BYTES];
-	uint8_t m2[MLEN + CRYPTO_BYTES];
+	//uint8_t m2[MLEN + CRYPTO_BYTES];
 	uint8_t sm[MLEN + CRYPTO_BYTES];
 	randombytes(m, MLEN);
 	        
@@ -529,6 +510,7 @@ int main()
 	
 
 	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		DWT->CYCCNT = 0;
 		CYCLES_START_M
 		ret_val += crypto_sign_keypair(pk, sk,
 		&getrand, &expmat, &sampvec, &matvecmult, 
@@ -538,7 +520,7 @@ int main()
 	
 	uint64_t total = getrand + expmat + sampvec + matvecmult + adderr + extwritepk + comphsk;		
 
-	pc.printf("get randomness clocks:       %lld (%f%%)\n\r", getrand,(double)((double)(getrand)/(double)total)*100);
+	pc.printf("get randomness clocks:       %lld (%f%%)\n\r", getrand/BENCHMARK_ROUND,(double)((double)(getrand)/(double)total)*100);
 	pc.printf("expand matrix clocks:        %lld (%f%%)\n\r", expmat/BENCHMARK_ROUND,(double)((double)expmat/(double)total)*100);
 	pc.printf("sample vector clocks:        %lld (%f%%)\n\r", sampvec/BENCHMARK_ROUND,(double)((double)sampvec/(double)total)*100);
 	pc.printf("matrix/vector mult clocks:   %lld (%f%%)\n\r", matvecmult/BENCHMARK_ROUND,(double)((double)matvecmult/(double)total)*100);
@@ -556,6 +538,7 @@ int main()
 	pc.printf("-----------------\n\r");
 	
 	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		DWT->CYCCNT = 0;
 		CYCLES_START_M
 		ret_val += crypto_sign(sm, &smlen, m, MLEN, sk,
 		&compcrh, &expmattv, &sampy, &matvecmults, &decompw, 
@@ -565,7 +548,7 @@ int main()
 	
 	total = compcrh + expmattv + sampy + matvecmults + decompw + compz + checkcs2 + comphint;		
 
-	pc.printf("compute crh clocks:          %lld (%f%%)\n\r", compcrh,(double)((double)(compcrh)/(double)total)*100);
+	pc.printf("compute crh clocks:          %lld (%f%%)\n\r", compcrh/BENCHMARK_ROUND,(double)((double)(compcrh)/(double)total)*100);
 	pc.printf("exp mat/transf vecs clocks:  %lld (%f%%)\n\r", expmattv/BENCHMARK_ROUND,(double)((double)expmattv/(double)total)*100);
 	pc.printf("sample y vector clocks:      %lld (%f%%)\n\r", sampy/BENCHMARK_ROUND,(double)((double)sampy/(double)total)*100);
 	pc.printf("matrix/vector mult clocks:   %lld (%f%%)\n\r", matvecmults/BENCHMARK_ROUND,(double)((double)matvecmults/(double)total)*100);
@@ -576,7 +559,7 @@ int main()
 	pc.printf("---------------------------------\n\r");
 	pc.printf("total measured clocks:       %lld (%f%%)\n\r", total/BENCHMARK_ROUND,(double)((double)total/(double)total)*100);
 	pc.printf("---------------------------------\n\r");
-	pc.printf("total keygen (%%meas) clocks: %lld (%f%%)\n\r", sg/BENCHMARK_ROUND, (double)((double)(total/BENCHMARK_ROUND)/(double)(kg/BENCHMARK_ROUND))*100);
+	pc.printf("total sign (%%meas) clocks:   %lld (%f%%)\n\r", sg/BENCHMARK_ROUND, (double)((double)(total/BENCHMARK_ROUND)/(double)(sg/BENCHMARK_ROUND))*100);
 	pc.printf("---------------------------------\n\r");
 
 	pc.printf("-------------------\n\r");
@@ -584,6 +567,7 @@ int main()
 	pc.printf("-------------------\n\r");
 	
 	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
+		DWT->CYCCNT = 0;
 		CYCLES_START_M	
 		ret_val += crypto_sign_verify(sm, CRYPTO_BYTES, m, MLEN, pk,
 		&compcrhv, &matvecmultv, &reconstw1, &rovc);
@@ -592,14 +576,14 @@ int main()
 	
 	total = compcrhv + matvecmultv + reconstw1 + rovc;		
 
-	pc.printf("compute crh clocks:          %lld (%f%%)\n\r", compcrhv,(double)((double)(compcrhv)/(double)total)*100);
+	pc.printf("compute crh clocks:          %lld (%f%%)\n\r", compcrhv/BENCHMARK_ROUND,(double)((double)(compcrhv)/(double)total)*100);
 	pc.printf("matrix/vector mult clocks:   %lld (%f%%)\n\r", matvecmultv/BENCHMARK_ROUND,(double)((double)matvecmultv/(double)total)*100);
 	pc.printf("reconstruct w1 clocks:       %lld (%f%%)\n\r", reconstw1/BENCHMARK_ROUND,(double)((double)reconstw1/(double)total)*100);
 	pc.printf("call ro verify chall clocks: %lld (%f%%)\n\r", rovc/BENCHMARK_ROUND,(double)((double)rovc/(double)total)*100);
 	pc.printf("---------------------------------\n\r");
 	pc.printf("total measured clocks:       %lld (%f%%)\n\r", total/BENCHMARK_ROUND,(double)((double)total/(double)total)*100);
 	pc.printf("---------------------------------\n\r");
-	pc.printf("total keygen (%%meas) clocks: %lld (%f%%)\n\r", vf/BENCHMARK_ROUND, (double)((double)(total/BENCHMARK_ROUND)/(double)(vf/BENCHMARK_ROUND))*100);
+	pc.printf("total verify (%%meas) clocks: %lld (%f%%)\n\r", vf/BENCHMARK_ROUND, (double)((double)(total/BENCHMARK_ROUND)/(double)(vf/BENCHMARK_ROUND))*100);
 	pc.printf("---------------------------------\n\r");
 	pc.printf("Dilithium failed if nonzero: %d\n\r", ret_val);
 	pc.printf("----------------------\n\r");
