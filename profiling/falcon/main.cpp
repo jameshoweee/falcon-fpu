@@ -3453,39 +3453,6 @@ poly_small_sqnorm(const int8_t *f, unsigned logn)
 	return s | -(ng >> 31);
 }
 
-static inline uint64_t
-fpr_ursh(uint64_t x, int n)
-{
-	x ^= (x ^ (x >> 32)) & -(uint64_t)(n >> 5);
-	return x >> (n & 31);
-}
-
-/*
- * Right-shift a 64-bit signed value by a possibly secret shift count
- * (see fpr_ursh() for the rationale).
- *
- * Shift count n MUST be in the 0..63 range.
- */
-static inline int64_t
-fpr_irsh(int64_t x, int n)
-{
-	x ^= (x ^ (x >> 32)) & -(int64_t)(n >> 5);
-	return x >> (n & 31);
-}
-
-/*
- * Left-shift a 64-bit unsigned value by a possibly secret shift count
- * (see fpr_ursh() for the rationale).
- *
- * Shift count n MUST be in the 0..63 range.
- */
-static inline uint64_t
-fpr_ulsh(uint64_t x, int n)
-{
-	x ^= (x ^ (x << 32)) & -(uint64_t)(n >> 5);
-	return x << (n & 31);
-}
-
 static inline fpr *
 align_fpr_1(void *tmp)
 {
@@ -6752,9 +6719,11 @@ int main()
  	* Falcon code below taken from optimised, using the native FPU.
 	* ret_val outputs 0 if functions work as expected.
 	* comment code out below to switch between Falcon and Dilithium.
+	* To switch between using the FPU, change the Makefile to use
+	* flags -DFALCON_FPEMU or -DFALCON_FPNATIVE, not both.
 	*/
 
-	unsigned logn = 9; // set to 9 for 512 parameters, 10 for 1024
+	unsigned logn = 10; // set to 9 for 512 parameters, 10 for 1024
 	char seed[16] = {0};
 	shake256_context sc;
 	shake256_init_prng_from_seed(&sc, seed, 16);
