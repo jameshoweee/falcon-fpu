@@ -92,7 +92,7 @@ C_DEFS += -fmessage-length=0 -fno-exceptions -ffunction-sections -fdata-sections
 C_DEFS += -funsigned-char -MMD -fno-delete-null-pointer-checks
 
 # See config.h for a description of these
-FALCON_FLAGS += -DFALCON_LE -DFALCON_FPNATIVE #-DFALCON_FPEMU 
+FALCON_FLAGS += -DFALCON_LE -DFALCON_FPEMU  #-DFALCON_FPNATIVE #
 
 C_FLAGS += -std=gnu11
 C_FLAGS += -include mbed_config.h

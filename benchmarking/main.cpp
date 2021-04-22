@@ -361,6 +361,7 @@ int main()
 	CALC_RESET
 	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
 		DWT->CYCCNT = 0;
+		randombytes(m, MLEN);
 		CALC_START
 		ret_val = crypto_sign(sm, &smlen, m, MLEN, sk);
 		CALC_STOP

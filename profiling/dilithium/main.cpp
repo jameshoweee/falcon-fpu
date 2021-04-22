@@ -539,6 +539,7 @@ int main()
 	
 	for (size_t r=0; r<BENCHMARK_ROUND; r++) {
 		DWT->CYCCNT = 0;
+		randombytes(m, MLEN);
 		CYCLES_START_M
 		ret_val += crypto_sign(sm, &smlen, m, MLEN, sk,
 		&compcrh, &expmattv, &sampy, &matvecmults, &decompw, 

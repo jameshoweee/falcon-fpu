@@ -5064,7 +5064,7 @@ int main()
 	// code for taking timing---
 	///////////////////////////////////////////////////////
 	
-	#define BENCHMARK_ROUND 100
+	#define BENCHMARK_ROUND 100000
 	uint64_t start, stop, delta, delta_old, min, max;
 	int us, cnt;
 	long double average_us, average_clk, avclk_old, var, std_err;
@@ -6285,7 +6285,7 @@ int main()
 	
 	/// function for llrintl
 	pc.printf("-------------------\n\r");
-	pc.printf("llrint-------------\n\r");
+	pc.printf("llrintl------------\n\r");
 	CALC_RESET
 	for(size_t r=0; r<rounds; r++){ 
 		long double r1  = (long double)rand64();
