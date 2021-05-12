@@ -187,11 +187,11 @@ uint32_t rand16(void) {
 int main()
 {
 
-		///////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////
 	// code for taking timing---
 	///////////////////////////////////////////////////////
 	
-	#define BENCHMARK_ROUND 100000
+	#define BENCHMARK_ROUND 1000000000
 	uint64_t start, stop, delta, delta_old, min, max;
 	int us, cnt;
 	long double average_us, average_clk, avclk_old, var, std_err;
@@ -912,6 +912,26 @@ int main()
 		fpr r1  = FPR((double)rand64());
 		CALC_START
 		fpr res = fpr_sqr(r1);
+		CALC_STOP
+	}	
+	CALC_AVG
+	pc.printf("Avg clock cycles:        %.0Lf\n\r", (average_clk));
+	pc.printf("Min clock cycles:        %lld\n\r", min);
+	pc.printf("Max clock cycles:        %lld\n\r", max);
+	pc.printf("Std dev of clock cycles: %.1Lf\n\r", (sqrt(var)));
+	pc.printf("Std err of clock cycles: %.1Lf\n\r", (std_err));
+
+	fflush(stdout);
+	wait(1);
+	
+	/// function for fpr sqrt
+	pc.printf("-------------------\n\r");
+	pc.printf("fpr sqrt-----------\n\r");
+	CALC_RESET
+	for(size_t r=0; r<rounds; r++){ 
+		fpr r1  = FPR((double)rand64());
+		CALC_START
+		fpr res = fpr_sqrt(r1);
 		CALC_STOP
 	}	
 	CALC_AVG
